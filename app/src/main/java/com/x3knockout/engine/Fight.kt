@@ -994,7 +994,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         }
         resolving = p
         val o = if (p.whiffs) airOutcome.also { it.clear(); it.result = PunchResult.AIR }
-                else boxer.punch(p.hand, p.level, base, p.counter, p.special)
+                else boxer.punch(p.hand, p.level, base, p.counter, p.special, body)
         resolving = null
         val landed = when (o.result) { PunchResult.LAND, PunchResult.COUNTER, PunchResult.STAGGER, PunchResult.KNOCKDOWN -> true; else -> false }
         val counter = p.counter || o.result == PunchResult.COUNTER
