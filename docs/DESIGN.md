@@ -76,6 +76,47 @@ did with it.
 
 ---
 
+## 0.1 AMENDMENT — WHO SETS THE PACE (the owner, 2026-09-10)
+
+> *"in superhotvr its the enemy that initiates the pacing based on the difficulty of the level."*
+
+This is the other half of the law, and getting it wrong is exactly how this game ended up with
+`Boxer.FLOOR_IDLE = 0.35` — a world that never runs slower than a third speed, and an owner who
+reported he could not see the mechanic at all.
+
+**The clock is never the difficulty.** In SUPERHOT the time function is the same in the first room
+and the last; what changes is the ROOM — how many enemies, where they stand, what they hold, how
+many lines of fire cross the space you have to move through. Difficulty is authored as THREAT, and
+the clock stays an honest instrument that answers only the player's own motion.
+
+This game did the opposite: it made the floor a difficulty dial (0.35 at idle, a "deep" 0.04–0.10
+only during a tell, a fuse ramping back to 0.60). So the pressure came from THE CLOCK RUNNING
+WITHOUT THE PLAYER — which takes the frozen moment away at precisely the moment it was promised,
+and hides the one mechanic the game is about.
+
+**The rule from here:**
+
+1. **The idle floor is a constant of the GAME**, not of the fight, the round or the fighter. Nobody
+   on the card gets a higher floor for being harder. A statue faces the same nearly-frozen world in
+   round one of the Rooster as in round three of the Metronome.
+2. **Difficulty is pressure IN THE RING** — how often he throws, how much overlaps, how short his
+   recovery, how little his guard opens, how fast a phrase follows the last, what a hit costs. All
+   of it his, all of it visible.
+3. **A statue is answered by the FIGHTER, never by the clock.** The crowd, the shortening tells, a
+   forced rate the game DECLARES on the rail: those are the boxer and the referee applying pressure
+   where the player can watch it arrive. A floor quietly raised behind their back is the designer
+   applying pressure and dressing it up as the sport.
+4. **The one exception, stated once:** a boxer must eventually reach you or there is no fight. That
+   is his to apply, on his own clock, in a way the player can see coming — never a number the world
+   clock adds while nobody is looking.
+
+THE METRONOME IS THE DELIBERATE EXCEPTION, and he proves the rule: his own seconds run on the
+player's motion, amplified. But that is HIS clock, it is announced in his billing, it belongs to the
+one fighter whose entire character is that he has read the rules — and the WORLD's floor is
+untouched even for him.
+
+---
+
 ## 1. THE VERBS
 
 ### 1.1 The founding observation
