@@ -26,6 +26,35 @@ fight.
 His pattern is deliberately PLAIN — no feint spam, no unreadable chains, long clean phrases. He does
 not need tricks. The trick is the game.
 
+## How each man WAITS — the style channel
+
+The arcade's opponents are recognisable across a room before either fighter throws anything, and it
+is not their outlines that do it: it is how they wait. The pose strips are shared here, so four
+multipliers on top of the same 196 frames carry it, plus how much of a landed punch each one shows.
+
+| | bob | sway | reaction | stature | reads as |
+|---|---|---|---|---|---|
+| Rooster | ×1.0 | ×1.0 | ×1.0 | 1.00 | the reference: a showboat on his toes |
+| Sardine | 2.4 Hz, shallow | 2.0 Hz, tight | ×1.35 | 0.90 | never still; flinches at everything |
+| Anvil | 0.45 Hz, deep | almost none | ×0.45 | 1.12 | a slow heave; hardly registers being hit |
+| Silk | 0.7 Hz, tiny | 0.55 Hz, wide | ×0.70 | 1.06 | a long lazy weight-shift, showing nothing |
+| Metronome | exactly on the beat | **none at all** | ×0.60 | 1.04 | a tick. Square, upright, unnervingly still |
+
+The reaction multiplier is also a fairness lever, not only a characterisation: the hit reaction is
+the player's feedback that a punch landed, so taking it away is part of what makes the later fights
+read as harder.
+
+Each man's three rounds carry his own names — the round card is the one moment the game says
+something about him before he hits you:
+
+| | R1 | R2 | R3 |
+|---|---|---|---|
+| Rooster | THE STRUT | THE RUFFLE | THE COCKFIGHT |
+| Sardine | THE SHOAL | THE BOIL | THE FEEDING |
+| Anvil | THE WEIGHT | THE SWING | THE DROP |
+| Silk | NOTHING SHOWS | STILL NOTHING | TOO LATE |
+| Metronome | ANDANTE | ALLEGRO | PRESTO |
+
 ## The numbers
 
 | | HP (E/N/H) | tell | strike | recover | dmg | hang (the read) | openings | feints from |
@@ -70,6 +99,27 @@ X3_FIGHTER=anvil blender -b --python blender/export_strokes.py -- \
 ```
 
 `X3_FIGHTER` unset (or `rooster`) writes `boxer.x3s`, unchanged.
+
+## The counter, and why it lives where it does
+
+The Anvil's punish is thrown from the head of the pattern interpreter, ahead of the wait and the
+phrase — not from a timer. The first attempt armed a countdown and waited for an idle frame; the
+pattern reached its own next tell 0.4 s later and the punish simply never arrived. The code read
+perfectly well and it was only caught on the glasses, in the log:
+
+```
+PUNCH hand=R level=HEAD result=GUARD dmg=0     <- the punch dies on his guard
+TELL  attack=PECK_R  tellT=0.63  phrase=N3     <- ...and the PATTERN answers, not the counter
+```
+
+It also cancels his wait. His long waits are the bait — the shape of his pattern is "throw, then
+stand there invitingly" — so an answer that arrived a second and a half later would not be
+connected to the punch that earned it. Now:
+
+```
+PUNCH hand=R level=HEAD result=GUARD dmg=0
+TELL  attack=WING_R  tellT=0.38                <- 2 ms later, and visibly shorter than his usual
+```
 
 ## Testing a specific man
 

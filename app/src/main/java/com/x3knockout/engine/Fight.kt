@@ -224,6 +224,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         const val ROUND_WORLD_S = 60f
         /** Past this many REAL seconds the floor holds 0.35 for the rest of the round: the soft anti-stall. */
         const val ROUND_REAL_CAP_S = 180f
+        /** The fallback only; every fighter carries his own three (see [Fighter.roundNames]). */
         val ROUND_NAMES = arrayOf("THE STRUT", "THE RUFFLE", "THE COCKFIGHT")
         const val CARD_T = 1.2f
         const val CORNER_T = Clock.CORNER_T
@@ -449,7 +450,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
     // ------------------------------------------------------------------ rounds and the count
     var round = 1; private set
-    val roundName: String get() = ROUND_NAMES[(round - 1).coerceIn(0, 2)]
+    /** HIS round names, not the Rooster's — the card announces the fight you are actually in. */
+    val roundName: String get() = fighter.roundNames[(round - 1).coerceIn(0, fighter.roundNames.size - 1)]
     /**
      * World seconds left on the round clock: `1:00` → `0:00`, visibly stopping when you stop. Off
      * the round — the attract and the intro run the world at 1.0 so his strips animate — it reads

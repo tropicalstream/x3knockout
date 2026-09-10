@@ -488,7 +488,6 @@ class Boxer {
     var suckerArmed = false; private set
     /** THE ANVIL: a punch of yours died on his guard and he is owed one. See [punch] and [update]. */
     var counterArmed = false; private set
-    private var counterArmT = 0f
     private var counterCount = 0
     /** After rising: only pecks until this world time. */
     var pecksOnlyLeft = 0f; private set
@@ -682,6 +681,7 @@ class Boxer {
      * flat) it is the title again, never a rise.
      */
     fun idle() {
+        counterArmed = false
         if (down && phase != Phase.KO) { rise(); return }
         fighting = false; abandon(); enter(Phase.IDLE)
     }
@@ -754,27 +754,6 @@ class Boxer {
         if (warbling) { warbleT = dec(warbleT, r); if (warbleT <= 0f) { warbleT = WARBLE_PERIOD; listener?.onSfx(Sfx.STUN_WARBLE, 1f, 0.45f) } }
         resquare(body, r)
         stall(body, w, r)
-
-        // ---------------------------------------------------------------- THE ANVIL'S ANSWER
-        // A punch of yours died on his guard and he is owed one. It is thrown HERE rather than
-        // inside `punch()` — a fight state machine that starts an attack inside another attack's
-        // resolution is one that will eventually be caught mid-transition — and it is thrown as a
-        // real attack with a real tell, short but visible, because a counter nobody can see is not
-        // a punishment, it is a dice roll. He only collects when he is actually free to.
-        if (counterArmed) {
-            counterArmT = dec(counterArmT, w)
-            val free = phase == Phase.IDLE
-            if (counterArmT <= 0f && free && !down) {
-                counterArmed = false
-                // WHICH hand alternates rather than rolls. This class has no random number
-                // generator on purpose — he is a cabinet, not a coin (see the class note) — and a
-                // counter you can learn the shape of is a counter you can eventually beat, which
-                // is the difference between a hard opponent and an unfair one.
-                counterCount++
-                beginTell(if (counterCount % 2 == 0) Attack.PECK_R else Attack.WING_R,
-                    COUNTER_TELL, track = false, chained = true, body = body)
-            } else if (down || phase == Phase.KO) counterArmed = false
-        }
 
         // the posture window the branches read (BOXER.md §7)
         watchPosture(body)
@@ -952,6 +931,29 @@ class Boxer {
      * table that is all branches can never spin a frame.
      */
     private fun runPattern(w: Float, body: Body) {
+        // ---------------------------------------------------------------- THE ANVIL'S ANSWER
+        // It goes FIRST, ahead of the wait and the phrase, because a counter that queues politely
+        // behind the pattern is not a counter. The first attempt armed a timer and waited for an
+        // IDLE frame; the pattern reached its next tell 0.4 s later and the punish never came —
+        // logged on the glasses, which is the only reason it was caught, because the code read
+        // perfectly well.
+        //
+        // It also CANCELS THE WAIT. His long waits are the bait — the whole shape of his pattern is
+        // "throw, then stand there invitingly" — so leaving the wait running would mean the greedy
+        // punch is answered a second and a half later, by which time the player has stopped
+        // connecting the two. The answer has to arrive while the arm is still out.
+        if (counterArmed && phase == Phase.IDLE) {
+            counterArmed = false
+            waitLeft = 0f
+            // WHICH hand alternates rather than rolls: this class has no random number generator on
+            // purpose (he is a cabinet, not a coin), and a counter whose shape can be learned is a
+            // counter that can eventually be beaten — the difference between hard and unfair.
+            counterCount++
+            listener?.onSay(Lines.THAT_ALL, false)
+            beginTell(if (counterCount % 2 == 0) Attack.PECK_R else Attack.WING_R,
+                COUNTER_TELL, track = false, chained = true, body = body)
+            return
+        }
         if (waitLeft > 0f) { waitLeft = dec(waitLeft, w); if (waitLeft > 0f) return }
         if (phrase == null) { startPhrase(); if (phrase == null) return }
         var fuel = 64
@@ -1510,9 +1512,7 @@ class Boxer {
             // short) tell, so the player still SEES it coming and can still, just about, answer it.
             // It is the one thing on the card that punishes the verb the player most wants to use,
             // and it is why he is the third fight and not the first.
-            if (fighter.gimmick == Fighter.Gimmick.COUNTER && !inDrill && !counterArmed) {
-                counterArmed = true; counterArmT = fighter.gimmickK
-            }
+            if (fighter.gimmick == Fighter.Gimmick.COUNTER && !inDrill) counterArmed = true
             return outcome
         }
 

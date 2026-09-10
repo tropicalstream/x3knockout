@@ -604,11 +604,15 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val wt = fight.clock.worldT
         val gain = dim * fightDim * koDim
         place.x = Boxer.X; place.z = Boxer.Z
-        place.y = 0.03f * sin(wt * 2.1f) * bobMul
+        // HOW HE WAITS — the channel that tells the five men apart before either of them moves.
+        // The Sardine jitters, the Anvil heaves, Silk shifts his weight and shows nothing, the
+        // Metronome ticks. Same 196 frames underneath all of it; four multipliers on top.
+        val fr = fight.fighter
+        place.y = 0.03f * fr.bobAmp * sin(wt * 2.1f * fr.bobHz) * bobMul
         place.yaw = set.headingTo(Boxer.X, Boxer.Z, camX, camZ)
-        place.roll = 0.035f * sin(wt * 1.3f)
+        place.roll = 0.035f * fr.swayAmp * sin(wt * 1.3f * fr.swayHz)
         place.pitch = 0f
-        place.scale = 1f
+        place.scale = fr.stature
         ux = cos(place.yaw); uz = -sin(place.yaw)
         val d = sqrt((Boxer.X - camX) * (Boxer.X - camX) + (Boxer.Z - camZ) * (Boxer.Z - camZ))
         val hatchK = sqrt(2.6f / d.coerceAtLeast(0.3f))
@@ -620,9 +624,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         tintPass(set, gain, hatchK)
 
         val tint = material.tint
-        val squash = b.squash.coerceIn(-1f, 1f)
+        // AND HOW MUCH HE SHOWS IT. A showboat rocks; a wardrobe barely notices; the champion
+        // refuses to give you the satisfaction — which is also a fairness lever, because the
+        // reaction is the player's feedback that a punch landed, and taking it away is part of
+        // what makes the later fights read as harder.
+        val squash = (b.squash * fr.reactMul).coerceIn(-1f, 1f)
         val sxz = 1f + squash * 0.10f; val sy = 1f - squash * 0.08f
-        val tilt = b.wobble + headSnap
+        val tilt = (b.wobble + headSnap) * fr.reactMul
         val ct = cos(tilt); val st = sin(tilt)
         val extendPart = if (b.extend) (if (b.flashGlove == Hand.LEFT) pGloveL else if (b.flashGlove == Hand.RIGHT) pGloveR else -1) else -1
         val extendHatch = if (b.extend) (if (b.flashGlove == Hand.LEFT) pHatchGloveL else if (b.flashGlove == Hand.RIGHT) pHatchGloveR else -1) else -1
@@ -1019,6 +1027,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // the glove in flight travels on world time and the hang and the fuse go on burning
         // (Boxer.update), so the read the rail measures includes the glove.
         m.reflex = if (b.phase == Boxer.Phase.TELL || b.phase == Boxer.Phase.STRIKE) ((b.hangLeft + b.fuseLeft) / (b.hangT + Boxer.FUSE_T)).coerceIn(0f, 1f) else -1f
+        // WHOSE NAME IS ON THE BOARD. It was a constant, so every man on the card was announced as
+        // the Rooster — the kind of defect that is invisible while there is only one opponent and
+        // absurd the moment there are five.
+        m.hisName = fight.fighter.name
+        m.introName = fight.fighter.name; m.introBilling = fight.fighter.billing
         m.hisHp = hisHpShown; m.hisKd = b.knockdownsRound
         m.yourName = if (store.champion) "CHAMPION" else "YOU"
         m.yourHp = f.hp / Fight.HP_MAX.toFloat(); m.yourKd = f.knockdownsYouRound

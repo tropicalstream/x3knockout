@@ -136,6 +136,7 @@ class Hud(private val out: Sink) {
         val P_INTRO_1 = floatArrayOf(320f, 175f); const val SC_INTRO_1 = 4.0f
         val P_INTRO_2 = floatArrayOf(320f, 215f); const val SC_INTRO_2 = 2.0f
         val P_INTRO_3 = floatArrayOf(320f, 245f); const val SC_INTRO_3 = 1.6f
+        /** Only the fallback now: the intro card and the marquee take the live fighter's name. */
         const val INTRO_NAME = "THE ROOSTER"
         const val INTRO_FULL = "ROY RUDD"
         const val INTRO_CORNER = "120 LB - FAR CORNER"
@@ -226,6 +227,9 @@ class Hud(private val out: Sink) {
 
         // ---- the scoreboard
         var hisName = "THE ROOSTER"
+        /** The bout card's two lines: who he is, and his one line of billing. */
+        var introName = INTRO_NAME
+        var introBilling = INTRO_FULL
         var hisHp = 1f
         var hisKd = 0
         var yourName = "YOU"
@@ -653,8 +657,8 @@ class Hud(private val out: Sink) {
     }
 
     private fun intro(m: Model) {
-        color(MAGENTA, 0.95f); textC(INTRO_NAME, P_INTRO_1[0], P_INTRO_1[1], SC_INTRO_1)
-        color(WHITE, 0.7f); textC(INTRO_FULL, P_INTRO_2[0], P_INTRO_2[1], SC_INTRO_2)
+        color(MAGENTA, 0.95f); textC(m.introName, P_INTRO_1[0], P_INTRO_1[1], SC_INTRO_1)
+        color(WHITE, 0.7f); textC(m.introBilling, P_INTRO_2[0], P_INTRO_2[1], SC_INTRO_2)
         color(WHITE, 0.5f); textC(INTRO_CORNER, P_INTRO_3[0], P_INTRO_3[1], SC_INTRO_3)
     }
 

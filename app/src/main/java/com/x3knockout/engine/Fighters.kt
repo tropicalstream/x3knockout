@@ -80,6 +80,40 @@ class Fighter(
     val glove: FloatArray,
     /** SILK's rule: no pupil, no crest, no glove flash — the tell is posture only. */
     val colourTells: Boolean = true,
+
+    // ------------------------------------------------------------------ HOW HE STANDS THERE
+    /**
+     * THE IDLE IS THE CHARACTER, and on this card it does more work than the silhouette does.
+     *
+     * The arcade's opponents are recognisable across a room before either of them throws anything,
+     * and it is not their outlines that do it — it is how they WAIT. One bounces, one sways like he
+     * is bored, one barely moves at all. The pose strips are shared here, so this is the channel
+     * that has to carry it: four numbers on top of the same 196 frames.
+     *
+     *   [bobHz] / [bobAmp]   the vertical bounce: fast and shallow reads nervous, slow and deep
+     *                        reads heavy, and near-zero reads like a man who has done this before
+     *   [swayHz] / [swayAmp] the roll: a lazy weight-shift, a metronome tick, or nothing
+     *
+     * All four are multipliers on the Rooster's own idle, so his row is 1.0 across and his fight is
+     * untouched — the same discipline the silhouettes are held to.
+     */
+    val bobHz: Float = 1f,
+    val bobAmp: Float = 1f,
+    val swayHz: Float = 1f,
+    val swayAmp: Float = 1f,
+    /**
+     * How much of a landed punch he shows. A showboat rocks; a wardrobe barely notices; the
+     * champion refuses to give you the satisfaction. Scales the squash, the wobble and the snap.
+     */
+    val reactMul: Float = 1f,
+    /** Standing height on the canvas, so the card is not five men of identical stature. */
+    val stature: Float = 1f,
+    /**
+     * HIS THREE ROUNDS HAVE HIS OWN NAMES. The round card is the one moment the game gets to say
+     * something about a man before he hits you, and "THE STRUT" over the Anvil is a card announcing
+     * the wrong fight. Three words each, and each says how that round is going to go.
+     */
+    val roundNames: Array<String> = arrayOf("ROUND ONE", "ROUND TWO", "THE LAST ROUND"),
 ) {
     /** How many spikes the crest carries at full health; 0 means he has no crest to read. */
     val hasCrest: Boolean get() = colourTells && id == "rooster"
@@ -349,6 +383,7 @@ class Fighter(
         val ROOSTER = Fighter(
             id = "rooster", name = "THE ROOSTER", billing = "ROY RUDD - THE STRUTTING CHAMPION OF NOWHERE",
             asset = "boxer", hp = intArrayOf(100, 120, 140),
+            roundNames = arrayOf("THE STRUT", "THE RUFFLE", "THE COCKFIGHT"),
             patterns = emptyList(),          // he keeps Boxer's own PATTERN_R1..R3
             primary = MAGENTA, trunks = CYAN, glove = RED,
         )
@@ -358,7 +393,10 @@ class Fighter(
             asset = "boxer_sardine", hp = intArrayOf(110, 130, 150),
             tellMul = 0.78f, strikeMul = 0.92f, recoverMul = 0.85f, dmgMul = 0.7f,
             hangMul = 0.85f, openMul = 0.85f, feintsFromRound = 2,
+            // never still: a fast shallow jitter, a quick nervous roll, and he flinches at everything
+            bobHz = 2.4f, bobAmp = 0.75f, swayHz = 2.0f, swayAmp = 0.6f, reactMul = 1.35f, stature = 0.90f,
             gimmick = Gimmick.FLURRY, gimmickK = 0.6f,
+            roundNames = arrayOf("THE SHOAL", "THE BOIL", "THE FEEDING"),
             patterns = listOf(SARDINE_R1, SARDINE_R2, SARDINE_R3),
             primary = GREEN, trunks = GOLD, glove = ORANGE,
         )
@@ -368,7 +406,10 @@ class Fighter(
             asset = "boxer_anvil", hp = intArrayOf(150, 180, 210),
             tellMul = 1.25f, strikeMul = 1.0f, recoverMul = 1.15f, dmgMul = 1.7f,
             hangMul = 1.1f, openMul = 1.0f, feintsFromRound = 2,
+            // a slow deep heave, almost no roll, and he hardly registers being hit
+            bobHz = 0.45f, bobAmp = 1.9f, swayHz = 0.4f, swayAmp = 0.5f, reactMul = 0.45f, stature = 1.12f,
             gimmick = Gimmick.COUNTER, gimmickK = 0.45f,
+            roundNames = arrayOf("THE WEIGHT", "THE SWING", "THE DROP"),
             patterns = listOf(ANVIL_R1, ANVIL_R2, ANVIL_R3),
             primary = ORANGE, trunks = RED, glove = GOLD,
         )
@@ -378,7 +419,10 @@ class Fighter(
             asset = "boxer_silk", hp = intArrayOf(120, 145, 170),
             tellMul = 0.88f, strikeMul = 0.95f, recoverMul = 0.9f, dmgMul = 1.1f,
             hangMul = 0.9f, openMul = 0.8f, feintsFromRound = 1,
+            // a long lazy weight-shift and almost no bounce: a man who is not going to show you anything
+            bobHz = 0.7f, bobAmp = 0.35f, swayHz = 0.55f, swayAmp = 1.7f, reactMul = 0.7f, stature = 1.06f,
             gimmick = Gimmick.QUIET, gimmickK = 0f,
+            roundNames = arrayOf("NOTHING SHOWS", "STILL NOTHING", "TOO LATE"),
             patterns = listOf(SILK_R1, SILK_R2, SILK_R3),
             primary = ICE, trunks = VIOLET, glove = STEEL, colourTells = false,
         )
@@ -388,7 +432,11 @@ class Fighter(
             asset = "boxer_metronome", hp = intArrayOf(140, 170, 200),
             tellMul = 1.0f, strikeMul = 1.0f, recoverMul = 0.85f, dmgMul = 1.4f,
             hangMul = 1.0f, openMul = 0.7f, feintsFromRound = 3,
+            // A TICK. Square, upright, metronomic: no roll at all and a bounce exactly on the beat.
+            // The stillest man on the card until the player moves, which is the joke and the threat.
+            bobHz = 1.0f, bobAmp = 0.5f, swayHz = 0f, swayAmp = 0f, reactMul = 0.6f, stature = 1.04f,
             gimmick = Gimmick.TEMPO, gimmickK = 2.2f,
+            roundNames = arrayOf("ANDANTE", "ALLEGRO", "PRESTO"),
             patterns = listOf(METRONOME_R1, METRONOME_R2, METRONOME_R3),
             primary = GOLD, trunks = WHITE, glove = MAGENTA,
         )
