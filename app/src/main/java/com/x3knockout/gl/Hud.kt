@@ -163,7 +163,15 @@ class Hud(private val out: Sink) {
         const val TITLE = "X3 KNOCKOUT"
         const val TRACE_T = 2.0f
         val P_MARQUEE = floatArrayOf(320f, 46f); const val SC_MARQUEE = 1.6f
-        const val MARQUEE = "READ THE ROOSTER. THEN MOVE."
+        /**
+         * THE MARQUEE IS THE PREMISE NOW, not a coaching note about one man. It named the Rooster
+         * back when he was the only opponent, and by the time there were five it was telling a
+         * player about to fight the champion to read a club fighter. A career needs its own first
+         * line, and this is the whole of it: who you are, where you are from, how far it is.
+         */
+        const val MARQUEE = "WASHINGTON D.C. - FIVE FIGHTS TO THE TITLE"
+        /** Under the traced name, on the title only: the man whose card this is. */
+        val P_WHO = floatArrayOf(320f, 196f); const val SC_WHO = 2.0f
         val P_SUBTITLE = floatArrayOf(320f, 195f); const val SC_SUBTITLE = 1.8f
         // The subtitle is gone at the owner's word. A title screen that explains its own mechanic
         // in a sentence is a title screen that does not trust the mechanic; the marquee and the
@@ -251,6 +259,8 @@ class Hud(private val out: Sink) {
         /** Who is already walking to the ring; empty on the last one. */
         var riseNext = ""
         var riseChampion = false
+        /** The title's one story row: who the player is and where the card left him. */
+        var titleWho = ""
         var hisHp = 1f
         var hisKd = 0
         var yourName = "YOU"
@@ -749,6 +759,7 @@ class Hud(private val out: Sink) {
         color(CYAN, 0.55f); textC(MARQUEE, P_MARQUEE[0], P_MARQUEE[1], SC_MARQUEE)
         val trace = (m.phaseT / TRACE_T).coerceIn(0f, 1f)
         color(MAGENTA, 0.65f + 0.30f * trace); traceC(TITLE, P_TITLE[0], P_TITLE[1], SC_TITLE, trace)
+        if (m.titleWho.isNotEmpty()) { color(WHITE, 0.55f); textC(m.titleWho, P_WHO[0], P_WHO[1], SC_WHO) }
         if (!m.headOn) { color(DAMAGE, 0.95f); textC(NO_HEAD, P_COIN[0], P_COIN[1], SC_COIN) }
         else if (sin(m.t * 4f) > -0.2f) { color(WHITE_GOLD, 0.95f); textC("INSERT COIN TO PLAY", P_COIN[0], P_COIN[1], 2.4f) }
         color(VIOLET, 0.6f); textC(WARNING, P_WARNING[0], P_WARNING[1], SC_SMALL)

@@ -1184,6 +1184,17 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     val yourNamePlate: String get() = if (store.champion) "CHAMPION" else YOU_NAME
 
     /**
+     * THE TITLE'S ONE STORY ROW. A career that is remembered between sessions has to say so on the
+     * attract screen, or the player who beat the Sardine last night meets the Anvil with no idea
+     * why. Three states: nobody yet, part-way up the card, and the belt.
+     */
+    val titleWho: String get() = when {
+        store.champion -> "$YOU_NAME - CHAMPION OF THE WORLD"
+        boutIndex > 0 -> "$YOU_NAME - ${rankWord(yourRank)} - NEXT ${Fighter.at(boutIndex).name}"
+        else -> "$YOU_NAME - $YOU_HOME - UNRANKED"
+    }
+
+    /**
      * THE RISE — the card between two fights, and the reason there is no coin between them.
      *
      * The owner's ruling: *"the next boxer should automatically come next... an inspirational

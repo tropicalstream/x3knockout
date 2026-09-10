@@ -1137,6 +1137,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         m.yourName = fight.yourNamePlate
         m.riseHead = fight.riseHead; m.riseLine = fight.riseLine; m.riseNext = fight.riseNext
         m.riseChampion = fight.riseChampion
+        m.titleWho = fight.titleWho
         m.introRank = Fight.rankWord(fight.fighter.rank)
         m.introStory = fight.fighter.story
         m.yourHp = f.hp / Fight.HP_MAX.toFloat(); m.yourKd = f.knockdownsYouRound
