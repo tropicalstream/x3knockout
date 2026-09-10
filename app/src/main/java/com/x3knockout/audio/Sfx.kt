@@ -13,6 +13,7 @@ import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.tanh
 import kotlin.random.Random
 
 /**
@@ -100,7 +101,19 @@ class Sfx(private val context: Context) {
         const val ROPES = 61        // the ropes shake after a knockdown
         const val CROWD_BED = 62    // THE CROWD IS THE RATE METER: the looping bed [crowd] drives (§9.3)
         const val BOO = 63          // three real seconds still while he is idle
-        private const val COUNT = 64
+        /**
+         * THE KNOCKOUT ROAR — the loudest thing in the game, and the only sample that is
+         * seconds long rather than milliseconds (the owner, 2026-09-10: *"there should be very
+         * loud cheering when a knockout occurs"*).
+         *
+         * It is an SFX and NOT a `CROWD` voice line on purpose. The crowd's spoken clips share
+         * the voice bus with the announcer, so a roar fired at the knockout would have queued
+         * behind `winner_ko` — or cut it — and the one thing a house roar must do is be UNDER
+         * the man with the microphone while he shouts over it. On the effects bus it simply
+         * plays, for three and a half seconds, while everything else happens on top.
+         */
+        const val KO_ROAR = 64
+        private const val COUNT = 65
         private const val RATE = 22050
     }
 
@@ -458,6 +471,31 @@ class Sfx(private val context: Context) {
                 ids[FALL] = load(dir, "fall", buf(600) { t -> sine(42f + 40f * exp(-t * 12f), t) * 0.9f * exp(-t * 4.5f) + noise() * 0.6f * exp(-t * 25f) + sq(84f, t) * 0.15f * exp(-t * 9f) })
                 ids[ROPES] = load(dir, "ropes", buf(500) { t -> (sine(160f + 20f * sine(9f, t), t) * 0.25f + noise() * 0.12f) * exp(-t * 4f) })
                 ids[CROWD_BED] = load(dir, "crowdbed", buf(2000) { t -> var v = 0f; for (i in 0 until 5) v += saw(70f + i * 37f, t) * 0.05f; (v + noise() * 0.35f) * (0.75f + 0.25f * sine(0.5f, t)) })
+                // THE HOUSE COMES DOWN, and the first attempt did not: measured, it came out at
+                // −17.6 dBFS RMS against the ambient bed's −15.7, so the loudest moment in the
+                // game was QUIETER than the room it was supposed to drown out. Sixteen detuned
+                // saws sum incoherently — a big peak and no density — which is exactly the wrong
+                // shape for a crowd. The fix is a soft clip: `tanh(3.0 × v)` folds the peaks in
+                // and lifts everything underneath, which is both what a compressor does to a
+                // stadium feed and what a thousand people actually sound like. −6.4 dBFS RMS,
+                // peak 0.999, about nine decibels over the bed.
+                //
+                // The rest is shape: voices spread 26 Hz apart and wobbling 4 Hz so they beat
+                // against each other; a 110 ms swell so it arrives WITH the punch; a plateau to
+                // 1.9 s, because a knockout crowd does not peak and stop; then a slow sag under
+                // a 2.3 Hz wobble, which is people shouting out of step.
+                ids[KO_ROAR] = load(dir, "koroar", buf(3500) { t ->
+                    var v = 0f
+                    for (i in 0 until 16) {
+                        val f = 150f + 26f * i + 4f * sine(0.7f + 0.13f * i, t)
+                        v += saw(f, t) * 0.14f + sine(f * 2f, t) * 0.056f
+                    }
+                    v += noise() * 0.60f
+                    val swell = 1f - exp(-t * 9f)
+                    val body = if (t < 1.9f) 1f else exp(-(t - 1.9f) * 0.9f)
+                    val wobble = 0.80f + 0.20f * sine(2.3f, t)
+                    tanh(v * 3f) * swell * body * wobble
+                })
                 ids[BOO] = load(dir, "boo", buf(900) { t -> var v = 0f; for (i in 0 until 5) v += saw(150f - 40f * (t / 0.9f) + i * 3f, t) * 0.1f; v * (1f - exp(-t * 20f)) * exp(-t * 2.2f) })
                 loaded = true
             }
@@ -468,7 +506,13 @@ class Sfx(private val context: Context) {
         if (!loaded || id < 0 || id >= COUNT) return
         handler?.post {
             val s = ids[id]; if (s == 0) return@post
-            val duck = if (duckProvider?.invoke() == true) 0.45f else 1f
+            // THE ROAR IS NEVER DUCKED. Every other effect gets out of the way of a voice, which
+            // is right — a tell's cluck under the corner's sentence is a cluck nobody hears. The
+            // knockout roar is the exception and it is the whole point of it: the announcer
+            // shouts OVER a house that has come down, and a roar that politely halved itself the
+            // moment he opened his mouth would be the one sound in the game doing its job
+            // backwards.
+            val duck = if (id != KO_ROAR && duckProvider?.invoke() == true) 0.45f else 1f
             val v = (volume * vol * duck).coerceIn(0f, 1f); if (v <= 0f) return@post
             pool.play(s, v, v, 1, 0, pitch.coerceIn(0.5f, 2f))
         }
@@ -497,7 +541,10 @@ class Sfx(private val context: Context) {
     fun crowd(level: Float, rate: Float = 1f) {
         handler?.post {
             if (!loaded) return@post
-            val v = (volume * 0.6f * level.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+            // THE BED HAS A CEILING OF 0.6 AND A KNOCKOUT IS ALLOWED THROUGH IT. `level` was
+            // clamped to 1 here, which put a hard lid on the loudest moment in the game two
+            // multiplications before anybody could hear it; a KO asks for 1.9 and gets it.
+            val v = (volume * 0.6f * level.coerceAtLeast(0f)).coerceIn(0f, 1f)
             if (v <= 0.01f) { if (crowdStream != 0) { pool.stop(crowdStream); crowdStream = 0 }; return@post }
             if (crowdStream == 0) crowdStream = pool.play(ids[CROWD_BED], v, v, 0, -1, rate.coerceIn(0.5f, 2f))
             else { pool.setVolume(crowdStream, v, v); pool.setRate(crowdStream, rate.coerceIn(0.5f, 2f)) }

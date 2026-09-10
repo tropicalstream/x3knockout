@@ -322,7 +322,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val surge = fight.crowdSurge
         val crowdAmp = (if (ovation) 0.20f else 0.02f + 0.10f * crowdLevel) + 0.16f * surge
         val crowdK = (if (title) 0.13f else if (ovation) 0.60f else 0.25f + 0.35f * crowdLevel) + 0.35f * surge
-        val bounce = if (ovation) 0.05f else 0.045f * surge
+        // the front row on a knockout: the ovation's own bounce PLUS the surge on top of it
+        val bounce = if (ovation) 0.05f + 0.035f * surge else 0.045f * surge
         // the ring: the knockdown's shake (a decaying impulse computed here, spatial phase only), the multiplier's glow, the clapper's pulse
         val ringAmp = if (ropeShakeT in 0f..RING_SHAKE_T) 0.05f * exp(-ropeShakeT / 0.12f) * cos(ropeShakeT * 2f * PI.toFloat() * 9f) else 0f
         var ringGlow = if (title) 0.42f else 1f + (fight.multiplier - 1).coerceIn(0, 3) / 3f * 0.667f

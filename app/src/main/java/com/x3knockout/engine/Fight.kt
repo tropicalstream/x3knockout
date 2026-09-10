@@ -571,6 +571,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
      * that only ever changes volume is a crowd nobody notices.
      */
     var crowdSurge = 0f; private set
+    /** True from the knockout until the next ceremony: the room does not calm down in between. */
+    private var crowdHold = false
     /** Yours, landed, unanswered — the mirror of [hitsUnanswered], and what the room chants on. */
     private var landedUnanswered = 0
     private var putHimAwaySaid = false
@@ -1315,6 +1317,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
     private fun enterTitle() {
         state = State.TITLE; stateT = 0f; menuOpen = false; creditsOpen = false
+        crowdSurge = 0f; crowdHold = false
         downWho = null; countStarted = false; koRoarT = 0f
         clearVerbs()
         clock.clearForced(); clock.floorOverride = -1f
@@ -1353,6 +1356,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         stepsRejected = 0; rejectArmed = true; stepTipOwed = false; hitBy.fill(0); hitsUnanswered = 0; answerSeen.fill(0)
         putHimAwaySaid = false; stickSaid = false; nextHand = Hand.LEFT; specialThrownRound = false
         stillT = 0f; sink = 0f; koRoarT = 0f; countStarted = false; downWho = null; chant = ""; chantT = 0f
+        crowdSurge = 0f; crowdHold = false; landedUnanswered = 0
         debugHp = 0; scriptT = 0f; scriptStep = 0
         tally = emptyList()
         clearVerbs()
@@ -1397,6 +1401,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
      */
     private fun enterIntro() {
         state = State.INTRO; stateT = 0f; introSkipWanted = false; introEnded = false
+        crowdHold = false
         boxer.taunt()
         val ids = ArrayList<String>(5)
         ids += Lines.INTRO_1
@@ -1549,6 +1554,12 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         host.say(if (boxer.knockdownsRound >= Boxer.TKO_KNOCKDOWNS_ROUND) Lines.WINNER_TKO else Lines.WINNER_KO, urgent = true)
         host.music(Music.WIN)
         koRoarT = KO_ROAR_T
+        // THE HOUSE COMES DOWN (the owner: "there should be very loud cheering when a knockout
+        // occurs"). On the EFFECTS bus, not the voice bus: the crowd's spoken clips queue behind
+        // the announcer, and the one thing a house roar has to do is be under him while he
+        // shouts over it. `Sfx.play` exempts this one id from the duck for the same reason.
+        host.sfx(Sfx.KO_ROAR, 1f, 1f)
+        crowdSurge = 1f; crowdHold = true
         Log.i(TAG, "KO real=%.1f score=%d bonus=%d mult=x%d newHigh=%s".format(Locale.US, fightRealT, score, bonus, prevMult, newHigh))
         ev("KO")
     }
@@ -1752,13 +1763,22 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         val level = when (state) {
             State.FIGHT -> 0.25f + 0.75f * crowdLevel
             State.KNOCKDOWN_COUNT -> if (countStarted && countN >= COUNT_CROWD_FROM) 0.35f + 0.12f * (countN - COUNT_CROWD_FROM) else 0.15f
-            State.KO -> if (koRoarT > 0f) 1f else 0.5f
-            State.RISE -> if (riseChampion) 0.9f else 0.45f
+            // 1.9 IS DELIBERATELY OVER THE TOP OF THE RANGE. `Sfx.crowd` scales by 0.6, so 1.0
+            // was never actually full — the loudest moment in the game was two thirds of the
+            // bed's own headroom. It sags to 1.2 after the first roar and stays there: a crowd
+            // that has just seen a knockout is louder for the rest of the minute than a crowd
+            // that has not.
+            State.KO -> if (koRoarT > 0f) 1.9f else 1.2f
+            State.RISE -> if (riseChampion) 1.6f else 1.0f
             State.INTRO, State.ROUND_CARD, State.ROUND_END -> 0.2f
             State.GAME_OVER -> 0.15f
             State.TITLE -> 0f
         }
-        if (crowdSurge > 0f) crowdSurge = max(0f, crowdSurge - dt / CROWD_SURGE_T)
+        // A cheer dies down in a second and a half; a KNOCKOUT does not, so the surge is HELD
+        // from the moment he lands until the next bout's ceremony begins. The room is still on
+        // its feet through the tally and the rise card, which is where the story of it is told.
+        if (crowdHold) crowdSurge = 1f
+        else if (crowdSurge > 0f) crowdSurge = max(0f, crowdSurge - dt / CROWD_SURGE_T)
         host.crowd(level * (1f + 0.45f * crowdSurge), 0.7f + 0.5f * crowdLevel)
     }
 
