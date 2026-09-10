@@ -1,7 +1,10 @@
 package com.x3knockout
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -415,6 +418,32 @@ class MainActivity : Activity(), GameHost {
         game.boot()
         music.play()
         if (harness) glView.queueEvent { game.debugStart(rnd.coerceAtLeast(1), fl, hp, drill, script) }
+        if (dbg) registerDebugMotionReceiver()
+    }
+
+    /**
+     * `adb shell am broadcast -a com.x3knockout.DEBUG_MOTION --ef pitch -0.35` (duck) / `--ef
+     * roll 0.4` (lean) / `--ez clear true` (let go, back to the real head). DEBUGGABLE BUILDS
+     * ONLY, same rule as the launch args above — this is for capturing footage off the desk,
+     * where there is no head in the loop to produce a duck or a slip at all, not a control
+     * surface anybody plays the game through.
+     */
+    private var debugMotionReceiver: BroadcastReceiver? = null
+    private fun registerDebugMotionReceiver() {
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (i.getBooleanExtra("clear", false)) { motion.debugRoll = null; motion.debugPitch = null; return }
+                if (i.hasExtra("roll")) motion.debugRoll = i.getFloatExtra("roll", 0f)
+                if (i.hasExtra("pitch")) motion.debugPitch = i.getFloatExtra("pitch", 0f)
+            }
+        }
+        val filter = IntentFilter("com.x3knockout.DEBUG_MOTION")
+        // RECEIVER_NOT_EXPORTED is API 33; no androidx.core in this project for the compat
+        // shim, and minSdk is 29 — a plain registerReceiver on the older platforms is fine
+        // because this whole path only exists in a debuggable build to begin with.
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, filter, RECEIVER_NOT_EXPORTED)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(r, filter)
+        debugMotionReceiver = r
     }
 
     // ------------------------------------------------------------ GameHost (any thread)
@@ -1183,6 +1212,7 @@ class MainActivity : Activity(), GameHost {
 
     override fun onDestroy() {
         mediaSession?.let { runCatching { it.release() } }; mediaSession = null
+        debugMotionReceiver?.let { runCatching { unregisterReceiver(it) } }; debugMotionReceiver = null
         sfx.release(); voice.release(); hero.release(); music.release()
         super.onDestroy()
     }

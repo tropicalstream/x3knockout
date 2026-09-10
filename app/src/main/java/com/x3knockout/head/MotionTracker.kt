@@ -180,6 +180,14 @@ class MotionTracker(ctx: Context) : SensorEventListener {
     var vertical = 0f; private set
     var roll = 0f; private set
     var pitchG = 0f; private set
+    /**
+     * A DEMO HOOK, AND NOTHING ELSE. There is no path anywhere in this app to synthesise a duck
+     * or a slip without a real head in the glasses — no replay, no fake-sensor HAL — so capturing
+     * a feature reel off the desk had no way to show them at all. `MainActivity` sets these from
+     * a debug-only broadcast (`ACTION_DEBUG_MOTION`); both null is the entire non-debug behaviour.
+     */
+    @Volatile var debugRoll: Float? = null
+    @Volatile var debugPitch: Float? = null
     /** Peak signals since the last [resetPeaks] — for the diagnostic plate and for tuning. */
     var peakW = 0f; private set
     var peakA = 0f; private set
@@ -296,6 +304,13 @@ class MotionTracker(ctx: Context) : SensorEventListener {
         val kp = 1f - exp(-dt / 0.06f)
         roll += (r - roll) * kp
         pitchG += (p - pitchG) * kp
+        // DEBUG-ONLY MOTION OVERRIDE — for capturing footage off the desk, where nobody's head is
+        // in the loop to produce a duck or a slip. Null in every ordinary run, so this line costs
+        // nothing; MainActivity is the only writer, and only when it decides the build is
+        // debuggable. Applied AFTER the real smoothing above rather than replacing rawG*, so a
+        // demo can still be interrupted by a real head movement mid-capture.
+        debugRoll?.let { roll = it }
+        debugPitch?.let { pitchG = it }
 
         // angular rates in the head frame: device Z is the look axis, X the ear axis, Y the neck.
         // The gyro's z is the NEGATIVE of d(roll)/dt in this class's convention — measured on the

@@ -114,6 +114,22 @@ def main():
         for i in range(120):
             tap(L if i % 2 == 0 else R); delay(700)
         delay(1000)
+    elif what == "open3":
+        # Three right-hand taps, one file, one adb round trip — for a scripted capture running
+        # alongside a concurrent scrcpy recording, where many small separate `adb shell` calls
+        # were observed to silently drop (the transport appears to have a practical concurrency
+        # limit on this hardware; see docs' capture notes). Fewer, larger calls is the fix.
+        delay(400)
+        tap(R); delay(550); tap(R); delay(550); tap(R); delay(400)
+    elif what == "close2":
+        delay(200)
+        tap(R); delay(550); tap(R); delay(400)
+    elif what == "tapr":
+        # One right-pad tap, for a scripted demo that needs to interleave a punch with an adb
+        # broadcast (a --ei command's DEBUG_MOTION override) between individual taps.
+        delay(150); tap(R); delay(150)
+    elif what == "tapl":
+        delay(150); tap(L); delay(150)
     elif what == "spam":
         # Taps only, no coin: for a fight already in progress that needs finishing from the desk.
         delay(2000)
