@@ -1,5 +1,12 @@
 # THE ONE BOXER — ROY "THE ROOSTER" RUDD
 
+> **AMENDED 2026-09-09 — the owner's ruling (DESIGN.md §0).** Every STRIKE time below is **world**
+> time, not real time. His punches and yours both CRAWL when you are still and close when you move:
+> the SUPERHOT VR mechanic is the game, and it does not get an exception for the moment that matters.
+> Columns headed `(real)` in the first draft now read `(world)`.
+
+
+
 The prototype's only opponent. Everything here is fitted to `docs/DESIGN.md` (the verbs, the time
 law, the collider) and to what is measured on disk (`docs/MOTION.md`); numbers marked **(tune)**
 are starting values for the lab. He is designed in the spirit of the 1984 arcade *Punch-Out!!*'s
@@ -76,7 +83,7 @@ Times are ROUND 1 at rate 1.0 (a moving player); the hang and the fuse stretch t
 one (DESIGN.md §2.2); §6 shortens them by round. The STRIKE is forced real time. Damage is on an
 open target; GUARD and GLANCE rules are DESIGN.md §4.1.
 
-| # | name (his voice) | attack | TELL — the high-contrast telegraph | tell (world) | STRIKE (real) | band / what it hits | cheap answer | safe answers | fatal answer | RECOVER (world) |
+| # | name (his voice) | attack | TELL — the high-contrast telegraph | tell (world) | STRIKE (world) | band / what it hits | cheap answer | safe answers | fatal answer | RECOVER (world) |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | **LEFT PECK** | left jab, straight to the head | LEFT pupil goes WHITE and stays lit; LEFT glove goes WHITE-hot; left shoulder dips; head tilts to HIS right. SFX: a short cluck (`TELL_PECK_L`) | 0.50 s (6 frames) | 0.25 s | a 0.24 m glove across 1.50–1.80 m at `headX ± 0.10` | **Lr** (lean AWAY from the lit glove). Bk absorbs: 2 dmg, no heart | Ll (dodges, but lands you where #2 comes from → the pattern answers with #2 on a 0.25 s tell); Du (a jab goes over: safe, no PERFECT); St | stand: **8** | 0.50 s |
 | 2 | **RIGHT PECK** | right cross to the head | RIGHT pupil WHITE; RIGHT glove WHITE-hot; right shoulder dips; head tilts to HIS left. A cluck a fourth higher (`TELL_PECK_R`) | 0.50 s | 0.25 s | as #1 | **Ll**. Bk absorbs (2) | Lr → branches to #1; Du; St | stand: **10** | 0.55 s |
@@ -152,7 +159,7 @@ centred, hands busy.
 | | R1 "THE STRUT" | R2 "THE RUFFLE" | R3 "THE COCKFIGHT" |
 |---|---|---|---|
 | tell length (world) | as §3 (peck 0.50 / wing 0.67 / uppercut 0.83) | × 0.75 | × 0.58 — the strip's tell segment plays faster; the strike segment always at 1× |
-| strike (real) | 0.25 / 0.33 | −0.02 s | −0.05 s |
+| strike (world) | 0.25 / 0.33 | −0.02 s | −0.05 s |
 | recover (world) | as §3 | × 0.8 | × 0.65 |
 | feints | none | **HALF-PECK**: the pupil flashes and the glove glows, but the glove stops at 30 % and never goes white — no strike. The tell of a feint: the pupil flashes only TWICE and the shoulder does not dip. If the player slipped, he throws the OTHER hand's peck with a 0.25 s tell into the side they leaned to | + **FALSE SUNRISE**: he crows "RISE—" and cuts off (`rise_cut`); the crest goes white then snaps violet; if the player slips he throws the WING into that side. + **HALF-STAMP**: the stamp without the crest — nothing follows; teaches "read the crest, not the feet" |
 | tracking | none | none | the Sunrise's column follows `leanX` for the first 40 % of the strike; the answer is St, or a slip begun INSIDE the strike |
