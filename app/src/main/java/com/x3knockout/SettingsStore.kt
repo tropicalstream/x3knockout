@@ -49,6 +49,14 @@ class SettingsStore(context: Context) {
     var bestKoMs: Int
         get() = p.getInt("bestKo", 0)
         set(v) { if (recordsEnabled && v > 0 && (bestKoMs == 0 || v < bestKoMs)) p.edit().putInt("bestKo", v).apply() }
+    /**
+     * THE FURTHEST RUNG BEATEN, so the card is where the player left it next launch. It lives with
+     * the RECORDS rather than the settings: RESET SETTINGS must not quietly demote somebody to the
+     * Rooster, and a debug launch must not promote them (the store refuses records from one).
+     */
+    var boutReached: Int
+        get() = p.getInt("bout", 0)
+        set(v) { if (recordsEnabled && v > boutReached) p.edit().putInt("bout", v).apply() }
     var fights: Int
         get() = p.getInt("fights", 0)
         set(v) { if (recordsEnabled) p.edit().putInt("fights", v).apply() }

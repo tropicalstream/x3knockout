@@ -205,7 +205,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         lastNanos = 0L
         for (b in arrayOf(lines, pts, hudBatch, extendBatch)) b.contextLost()
         for (b in arrayOf(ringBatch, crowdBatch)) b.contextLost()
-        strips = StripSet.load(ctx, "boxer").also { fight.boxer.attach(it); bindParts(it) }
+        loadFighterStrips(fight.fighter.asset)
+        loadedAsset = fight.fighter.asset
         ringModel = StrokeModel.load(ctx, "ring")
         crowdModel = StrokeModel.load(ctx, "crowd")
         refereeModel = StrokeModel.load(ctx, "referee")
@@ -220,6 +221,24 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         Matrix.orthoM(ortho, 0, 0f, 640f, 480f, 0f, -1f, 1f)
     }
 
+    /** Which man's strips are currently bound; a change of bout swaps them on the GL thread. */
+    private var loadedAsset = ""
+
+    /**
+     * BIND A FIGHTER'S STRIPS. The whole card shares a rig, so this is genuinely just a different
+     * set of frames over the same 32 parts and the same 7 markers — every part index the renderer
+     * cached in [bindParts] is re-derived anyway, which is what keeps a boxer with no crest from
+     * drawing the Rooster's.
+     *
+     * `StripSet.load` caches per name, so walking the card twice costs one parse per man and the
+     * memory of five 2 MB frame tables — measured, and cheaper than the music.
+     */
+    private fun loadFighterStrips(asset: String) {
+        strips = StripSet.load(ctx, asset).also { fight.boxer.attach(it); bindParts(it) }
+        loadedAsset = asset
+        Log.i(TAG, "strips: $asset (${strips?.parts?.size ?: 0} parts)")
+    }
+
     override fun onDrawFrame(gl: GL10?) {
         val now = System.nanoTime()
         val dt = if (lastNanos == 0L) 0.016f else ((now - lastNanos) / 1e9f).coerceIn(0f, 0.05f)
@@ -228,6 +247,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         head.update(dt)
         motion.update(dt)
         val headOn = head.running && motion.available
+        // A KO moved the card on, so the next man's frames are bound here — on the GL thread, at a
+        // frame boundary, before anything reads the set. The fight never touches GL and the parse
+        // is cached, so a bout change costs one frame the first time and nothing afterwards.
+        if (fight.fighter.asset != loadedAsset) loadFighterStrips(fight.fighter.asset)
         fight.update(dt, head.yaw, head.pitch, head.running)
         tick(dt)
 
@@ -641,12 +664,43 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
                 StripSet.Cls.OUTLINE -> material.gain(i, gain)
             }
         }
+        // ---------------------------------------------------------------- WHOSE COLOURS
+        // The card shares one rig, so the man in the other corner is a PALETTE and a silhouette,
+        // not a skeleton — the same economy the arcade ran on when it reused a handful of
+        // animations across a roster. The redirect happens here, straight after the class gains and
+        // BEFORE any tell is written, so every flash below still wins over it exactly as it did
+        // when there was only one boxer.
+        val f = fight.fighter
+        if (f.id != "rooster") {
+            for ((i, p) in set.parts.withIndex()) {
+                val nm = p.name
+                val rgb = when {
+                    nm.startsWith("glove") || nm.startsWith("hatch_glove") -> f.glove
+                    nm.startsWith("trunks") || nm.startsWith("hatch_trunks") -> f.trunks
+                    nm.startsWith("eyes") || nm.startsWith("pupil") -> null      // the eyes are the tell; never repainted
+                    else -> f.primary
+                }
+                if (rgb != null) material.set(i, rgb[0], rgb[1], rgb[2], material.gain(i))
+            }
+        }
         val hurt = b.headFlashT > 0f || b.bodyFlashT > 0f || b.phase == Boxer.Phase.HIT || b.phase == Boxer.Phase.STAGGER || b.phase == Boxer.Phase.STUN
         if (!hurt) material.gain(pSweat, 0f)
         if (!b.spirals) material.gain(pSpirals, 0f)
         if (pTongue >= 0 && !b.tongue) material.gain(pTongue, 0f)
         if (pTeeth >= 0 && b.mouth != Boxer.Mouth.GRIMACE) material.gain(pTeeth, 0f)
         for (k in 0 until 5) if (pMouth[k] >= 0 && k != b.mouth.ordinal) material.gain(pMouth[k], 0f)
+        // ---------------------------------------------------------------- SILK'S SILENCE
+        // He has no colour channel at all (Fighter.Gimmick.QUIET): no crest, no pupil flash, no
+        // white glove. Everything the last three fights taught the player to read as LIGHT he has
+        // to read as SHAPE — the shoulder that dips, the foot that plants, the glove that leaves
+        // the frame — and every one of those cues is still in the pose strip, untouched. That is
+        // what makes it a legibility tax rather than a cheat: the information did not go away, the
+        // player is just no longer being handed it in the easiest possible channel.
+        if (!f.colourTells) {
+            for (k in 0 until 5) material.gain(pCrest[k], 0f)
+            material.gain(pPupilL, 0f); material.gain(pPupilR, 0f)
+            return
+        }
         // the crest: VIOLET at rest, GOLD for a hook, WHITE for the uppercut, AMBER and dim when he waits you out; a spike lost per knockdown
         val crestRgb = when (b.crest) { Boxer.Crest.VIOLET -> VIOLET; Boxer.Crest.GOLD, Boxer.Crest.GOLD_DROOP -> GOLD; Boxer.Crest.WHITE -> WHITE; Boxer.Crest.AMBER -> AMBER }
         val crestGain = gain * (if (b.crest == Boxer.Crest.AMBER) 0.6f else if (b.crest == Boxer.Crest.WHITE) 1.3f else 1f) * (if (b.sparksT > 0f) 0.3f else 1f)

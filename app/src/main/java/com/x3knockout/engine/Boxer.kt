@@ -136,6 +136,10 @@ class Boxer {
         const val TELL_FEINT_FOLLOW = 0.25f
         /** D's sucker uppercut on a player still upright and centred after the 1-2. */
         const val TELL_SUCKER = 0.5f
+        /** THE ANVIL's counter: short enough to be a punishment, long enough to be an answerable one. */
+        const val COUNTER_TELL = 0.30f
+        /** THE METRONOME's crawl — his clock at a dead stop. Never zero: see [update]. */
+        const val TEMPO_FLOOR = 0.10f
         /** R3's Sunrise column tracks `leanX` for the first 40 % of the strike. */
         const val TRACK_FRAC = 0.4f
 
@@ -411,6 +415,15 @@ class Boxer {
     /** Where his own lines go (`HIM …`, `TKO`) — the fight logs the DESIGN.md §13 lines from the callbacks. Null in a test. */
     var log: ((String) -> Unit)? = null
     /** 0 = EASY, 1 = NORMAL, 2 = HARD. */
+    /**
+     * WHICH MAN IS IN THE OTHER CORNER. Everything below that used to be a constant of "the boxer"
+     * is now a constant of THIS boxer: his health, his timing, how long he hangs, how wide his
+     * openings are, when he starts lying, and his pattern. The Rooster's profile carries exactly
+     * the numbers the owner has already played, so setting the card's first fighter changes
+     * nothing — which is the property that made it safe to do this to a working fight.
+     */
+    var fighter: Fighter = Fighter.ROOSTER
+
     var difficulty = 1
     /** The round, 1..3 — sets the escalation row. */
     var round = 1; private set
@@ -473,6 +486,10 @@ class Boxer {
     var stunLeft = 0f; private set
     /** After a stagger in R2+, the next attack is always the Sunrise. */
     var suckerArmed = false; private set
+    /** THE ANVIL: a punch of yours died on his guard and he is owed one. See [punch] and [update]. */
+    var counterArmed = false; private set
+    private var counterArmT = 0f
+    private var counterCount = 0
     /** After rising: only pecks until this world time. */
     var pecksOnlyLeft = 0f; private set
     /** Real seconds since `that_all` — the once-per-6-s rule. */
@@ -597,7 +614,7 @@ class Boxer {
     fun newFight(seed: Int, difficulty: Int) {
         this.difficulty = difficulty.coerceIn(0, 2)
         this.seed = seed
-        hpMax = HP_BY_DIFFICULTY[this.difficulty]
+        hpMax = fighter.hp[this.difficulty]
         hp = hpMax
         knockdownsFight = 0; knockdownsRound = 0; ladderNext = 0
         rotation = IntArray(0); rotationAt = 0
@@ -703,8 +720,29 @@ class Boxer {
      * transitions, the picture, and the strip last on whichever clock the phase says.
      */
     fun update(wdt: Float, dt: Float, body: Body) {
-        val w = if (wdt.isFinite()) wdt.coerceAtLeast(0f) else 0f
+        var w = if (wdt.isFinite()) wdt.coerceAtLeast(0f) else 0f
         val r = if (dt.isFinite()) dt.coerceAtLeast(0f) else 0f
+
+        // ---------------------------------------------------------------- THE METRONOME'S CLOCK
+        // The champion does not take the world's clock; he takes the PLAYER'S. Everyone else on the
+        // card advances on `wdt`, which the fight has already deepened to give the player their read
+        // — so a still player faces a still opponent, which is the whole promise. He is the fight
+        // where that promise is turned into the exam: his own seconds are the player's motion,
+        // amplified, so standing still makes him slower than anybody on the card and moving makes
+        // him faster than all of them.
+        //
+        // TEMPO_FLOOR is not zero and must never be: an opponent who literally stopped would let a
+        // motionless player win by outlasting him, and there would be no fight. It is a crawl, not
+        // a freeze — the same reasoning as the world clock's own floor.
+        //
+        // The RIGHT-hand term is what makes it fair: he reads `body.moving`, the same scalar the
+        // clock itself reads, so what accelerates him is exactly what the player can see
+        // accelerating the world on the rail. Nothing is hidden; the instrument is already on
+        // screen. Only his own timers take this clock — the guard, the stall and the flashes stay
+        // on the clocks they were on, because those are the fight's, not his.
+        if (fighter.gimmick == Fighter.Gimmick.TEMPO) {
+            w = r * (TEMPO_FLOOR + fighter.gimmickK * body.moving.coerceIn(0f, 1f))
+        }
 
         // real time: the hang and the fuse bound the read; the flashes belong to the plate
         thatAllAgo += r
@@ -716,6 +754,27 @@ class Boxer {
         if (warbling) { warbleT = dec(warbleT, r); if (warbleT <= 0f) { warbleT = WARBLE_PERIOD; listener?.onSfx(Sfx.STUN_WARBLE, 1f, 0.45f) } }
         resquare(body, r)
         stall(body, w, r)
+
+        // ---------------------------------------------------------------- THE ANVIL'S ANSWER
+        // A punch of yours died on his guard and he is owed one. It is thrown HERE rather than
+        // inside `punch()` — a fight state machine that starts an attack inside another attack's
+        // resolution is one that will eventually be caught mid-transition — and it is thrown as a
+        // real attack with a real tell, short but visible, because a counter nobody can see is not
+        // a punishment, it is a dice roll. He only collects when he is actually free to.
+        if (counterArmed) {
+            counterArmT = dec(counterArmT, w)
+            val free = phase == Phase.IDLE
+            if (counterArmT <= 0f && free && !down) {
+                counterArmed = false
+                // WHICH hand alternates rather than rolls. This class has no random number
+                // generator on purpose — he is a cabinet, not a coin (see the class note) — and a
+                // counter you can learn the shape of is a counter you can eventually beat, which
+                // is the difference between a hard opponent and an unfair one.
+                counterCount++
+                beginTell(if (counterCount % 2 == 0) Attack.PECK_R else Attack.WING_R,
+                    COUNTER_TELL, track = false, chained = true, body = body)
+            } else if (down || phase == Phase.KO) counterArmed = false
+        }
 
         // the posture window the branches read (BOXER.md §7)
         watchPosture(body)
@@ -1001,7 +1060,8 @@ class Boxer {
 
     private fun desperate(): Boolean = round >= 3 && hpFrac < DESPERATE_HP_FRAC
     private fun waitMul(): Float = if (desperate()) 0.5f else 1f
-    private fun feintsOn(): Boolean = round >= FEINTS_FROM_ROUND[difficulty.coerceIn(0, 2)]
+    private fun feintsOn(): Boolean =
+        round >= minOf(FEINTS_FROM_ROUND[difficulty.coerceIn(0, 2)], fighter.feintsFromRound)
 
     /** The feint's length: the strip's authored count when it is on disk, BOXER.md §8's number until then. */
     private fun feintLength(kind: Feint): Float {
@@ -1044,12 +1104,16 @@ class Boxer {
         trackingArmed = track && atk == Attack.SUNRISE; tracking = false
         chainedAfterStep = chained && lastAnswer == Answer.STEP
         val d = difficulty.coerceIn(0, 2)
-        val base = if (override >= 0f) override else atk.tellT * TELL_MUL[round - 1]
-        tellDur = (base * TELL_MUL_DIFF[d] * nextTellMul).coerceAtLeast(0.05f)
+        var base = if (override >= 0f) override else atk.tellT * TELL_MUL[round - 1]
+        // THE FLURRY takes its bite out of the CHAINED shots only — the ones the phrase authored a
+        // short tell for. Shortening his opening shot too would just make him a fast boxer; taking
+        // it out of the follow-ups is what makes the PHRASE the punch rather than the shot.
+        if (fighter.gimmick == Fighter.Gimmick.FLURRY && override >= 0f) base *= fighter.gimmickK
+        tellDur = (base * fighter.tellMul * TELL_MUL_DIFF[d] * nextTellMul).coerceAtLeast(0.05f)
         nextTellMul = 1f
-        strikeDur = (atk.strikeT + STRIKE_DELTA[round - 1]).coerceAtLeast(0.1f)
-        recoverDur = atk.recoverT * RECOVER_MUL[round - 1]
-        hangLeft = hangT; fuseLeft = FUSE_T; fuseBurned = false; stillInFuse = false; whistled = false
+        strikeDur = ((atk.strikeT + STRIKE_DELTA[round - 1]) * fighter.strikeMul).coerceAtLeast(0.1f)
+        recoverDur = atk.recoverT * RECOVER_MUL[round - 1] * fighter.recoverMul
+        hangLeft = hangT * fighter.hangMul; fuseLeft = FUSE_T; fuseBurned = false; stillInFuse = false; whistled = false
         onLineAtStrike = false
         if (atk == Attack.SUNRISE) suckerArmed = false
         placeAim(body, atk)
@@ -1132,7 +1196,7 @@ class Boxer {
             StrikeResult.BLOCK, StrikeResult.CRUSH -> atk.dmgGuard
             else -> 0
         }
-        var dmg = (base * DMG_MUL_DIFF[difficulty.coerceIn(0, 2)]).roundToInt()
+        var dmg = (base * DMG_MUL_DIFF[difficulty.coerceIn(0, 2)] * fighter.dmgMul).roundToInt()
         if (result == StrikeResult.GLANCE) dmg = (dmg * 0.5f).roundToInt()
         if (drill != Drill.OFF) dmg = 0
 
@@ -1363,7 +1427,11 @@ class Boxer {
     // ------------------------------------------------------------------ the guard
 
     /** A window opens (or a longer one replaces a shorter): what opened it names the `GUARD open= by=` line. */
-    private fun openGuard(seconds: Float, by: String, blows: Int) {
+    private fun openGuard(seconds0: Float, by: String, blows: Int) {
+        // ONE PLACE. Every route into an opening — a body blow, a guard-counter, the end of a
+        // recover, a special — comes through here, so [Fighter.openMul] is the whole of "his
+        // openings are stingier" and there is no second scaling anybody can forget to apply.
+        val seconds = seconds0 * fighter.openMul
         if (seconds > guardOpenLeft) { guardOpenLeft = seconds; guardOpenBy = by }
         bodyBlowsInWindow = blows
     }
@@ -1435,6 +1503,16 @@ class Boxer {
             if (special) { openGuard(GUARD_OPEN_SPECIAL, "SPECIAL", blows = 0); outcome.opened = true }
             else if (thatAllAgo >= THAT_ALL_COOLDOWN) { thatAllAgo = 0f; listener?.onSay(Lines.THAT_ALL, false) }
             listener?.onHitReaction(HitKind.BLOCKED)
+            // THE ANVIL'S RULE. Everyone else merely absorbs a punch into a raised guard; he
+            // charges for it. The counter is armed here rather than thrown here, because a punch
+            // resolving inside another punch's resolution is how a fight state machine ties itself
+            // in knots — [update] throws it on the next frame, as a real attack with a real (very
+            // short) tell, so the player still SEES it coming and can still, just about, answer it.
+            // It is the one thing on the card that punishes the verb the player most wants to use,
+            // and it is why he is the third fight and not the first.
+            if (fighter.gimmick == Fighter.Gimmick.COUNTER && !inDrill && !counterArmed) {
+                counterArmed = true; counterArmT = fighter.gimmickK
+            }
             return outcome
         }
 
@@ -1738,5 +1816,14 @@ class Boxer {
     )
 
     /** The round's table. */
-    fun pattern(round: Int): List<Phrase> = when (round) { 2 -> PATTERN_R2; 3 -> PATTERN_R3; else -> PATTERN_R1 }
+    /**
+     * HIS pattern, or the Rooster's. A fighter with an empty [Fighter.patterns] keeps the tables
+     * below, which is how the Rooster stays byte-for-byte the fight that was tested; anyone else
+     * brings three lists of their own and a short list simply repeats its last round.
+     */
+    fun pattern(round: Int): List<Phrase> {
+        val own = fighter.patterns
+        if (own.isNotEmpty()) return own[(round - 1).coerceIn(0, own.size - 1)]
+        return when (round) { 2 -> PATTERN_R2; 3 -> PATTERN_R3; else -> PATTERN_R1 }
+    }
 }

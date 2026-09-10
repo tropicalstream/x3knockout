@@ -620,6 +620,11 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     // ================================================================== BOOT AND SETTINGS
 
     fun boot() {
+        // THE CARD REMEMBERS. A player who beat the Rooster last night does not have to beat him
+        // again to reach the Sardine — the ladder is a record of what they can do, so it is read
+        // back here. A debug launch has already set the bout by hand and disabled records, so it
+        // must not be overwritten by the stored one.
+        if (store.recordsEnabled) boutIndex = store.boutReached.coerceIn(0, Fighter.CARD.size - 1)
         clock.log = { Log.i(TAG, it) }
         boxer.log = { Log.i(TAG, it) }
         boxer.listener = this
@@ -1133,6 +1138,20 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     }
 
     /** Everything a fight owns, before the first card. Shared by the coin, the continue and the harness. */
+    /**
+     * WHERE ON THE CARD WE ARE — an index into [Fighter.CARD], 0 = the Rooster.
+     *
+     * A KO advances it and the next coin meets the next man; a LOSS does not, so a continue is
+     * always a rematch with the boxer who just beat you and never a promotion. That is the arcade's
+     * own rule and it is the one that makes the ladder mean something: the card is a record of what
+     * you can actually beat, not of how many coins you fed it.
+     */
+    var boutIndex = 0; private set
+    val fighter: Fighter get() = Fighter.at(boutIndex)
+
+    /** Put a specific fighter up — the debug launch (`--ei bout N`) and the tests. */
+    fun setBout(i: Int) { boutIndex = i.coerceIn(0, Fighter.CARD.size - 1) }
+
     private fun newFight() {
         score = 0; multiplier = 1; dodgeStreak = 0; newHigh = false; hits = 0; perfects = 0
         hp = HP_MAX; hearts = HEARTS; heartRefillT = 0f; meter = 0; meterShown = 0f; chain = 0
@@ -1145,7 +1164,10 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         clearVerbs()
         round = 1
         applySettings()
+        boxer.fighter = fighter
         boxer.newFight(seed = (t * 60f).toInt(), difficulty = store.difficulty)
+        Log.i(TAG, "BOUT ${boutIndex + 1}/${Fighter.CARD.size} ${fighter.name} hp=${fighter.hp[store.difficulty.coerceIn(0, 2)]} " +
+            "tell=x${fighter.tellMul} dmg=x${fighter.dmgMul} hang=x${fighter.hangMul} gimmick=${fighter.gimmick}")
     }
 
     /** The verbs and the words that belong to a round, dropped between states. */
@@ -1297,6 +1319,14 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         score = (score * DIFF_MULT[store.difficulty.coerceIn(0, 2)]).toInt()
         newHigh = score > store.highScore && score > 0
         store.highScore = score; store.bestKoMs = koRealMs; store.champion = true; store.knockdownScored = true
+        // UP THE CARD. The next coin meets the next man; beating the last one leaves the ladder
+        // where it is, so the champion can be fought again rather than the card silently wrapping
+        // round to the Rooster and making the achievement disappear.
+        if (boutIndex < Fighter.CARD.size - 1) {
+            boutIndex++
+            store.boutReached = boutIndex
+            Log.i(TAG, "CARD advanced to ${boutIndex + 1}/${Fighter.CARD.size} ${Fighter.at(boutIndex).name}")
+        }
         tally = listOf("TIME ${clockText(fightRealT)}", "HITS $hits", "PERFECTS $perfects", "KNOCKDOWNS ${boxer.knockdownsFight}", "TIME BONUS $bonus", "SCORE $score")
         clearVerbs()
         clock.clearForced(); clock.forceSlow(Clock.SLOW_KO_RATE, Clock.SLOW_KO_T)

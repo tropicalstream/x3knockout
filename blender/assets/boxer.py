@@ -63,7 +63,45 @@ import math
 import bpy
 from mathutils import Vector, Matrix
 
-ASSET_NAME = "boxer"
+# ---------------------------------------------------------------- WHICH MAN THIS IS
+# THE CARD SHARES ONE RIG. Five opponents, one skeleton, one set of pose strips: the joints, the
+# markers and every frame of every strip are identical, and what differs is the SHAPE hung on them.
+# That is not a shortcut, it is the arcade's own economy — a roster built from one animation budget
+# — and it is what makes five boxers affordable on a device with this one's vertex budget.
+#
+# `X3_FIGHTER` picks the look; the exporter writes `boxer_<id>.x3s` (the Rooster keeps `boxer`).
+# Each entry is deliberately a SILHOUETTE change first and a palette change second: on a stroke
+# renderer at 640x480 the reliable identity cue is the outline, and colour is what the tells use.
+import os as _os
+LOOKS = {
+    # Every number is AUTHORED, not derived from the Rooster by a multiplier. Deriving them looked
+    # tidier and quietly moved him: 0.22 x 1.09 is 0.2398, not the 0.24 his trunks were drawn at, and
+    # the reference figure is the one fight that has actually been played and approved. A silhouette
+    # is a drawing; it gets drawn.
+    #
+    #   head/headhatch  the skull ellipse and the hatch inside it       (rx, rz)
+    #   torso/…hatch    the trapezium's top and bottom half-widths      (top, bottom)
+    #   trunks/…hatch   the same for the shorts                         (top, bottom)
+    #   ears, glove     scale factors on the reference shapes
+    #   crest           how many of the five spikes are visible (0 = no crest at all)
+    "rooster":   dict(crest=5, head=(0.28, 0.35), headhatch=(0.20, 0.30), ears=1.0, glove=1.00,
+                      torso=(0.25, 0.22), torsohatch=(0.20, 0.18), trunks=(0.22, 0.24), trunkshatch=(0.20, 0.22)),
+    # SAL "THE SARDINE" MARINO — small, narrow, all elbows: a flyweight who never throws once
+    "sardine":   dict(crest=0, head=(0.22, 0.28), headhatch=(0.15, 0.24), ears=1.4, glove=0.84,
+                      torso=(0.19, 0.17), torsohatch=(0.15, 0.13), trunks=(0.17, 0.19), trunkshatch=(0.15, 0.17)),
+    # DUKE "THE ANVIL" ODELL — a wardrobe with a head on it: tiny skull, vast shoulders, huge mitts
+    "anvil":     dict(crest=0, head=(0.21, 0.24), headhatch=(0.15, 0.20), ears=0.7, glove=1.30,
+                      torso=(0.38, 0.30), torsohatch=(0.31, 0.25), trunks=(0.30, 0.32), trunkshatch=(0.27, 0.29)),
+    # "SILK" SORENSEN — long, still and expressionless behind a visor. Nothing on him lights up
+    "silk":      dict(crest=0, head=(0.25, 0.36), headhatch=(0.18, 0.31), ears=0.5, glove=0.95, visor=True,
+                      torso=(0.23, 0.26), torsohatch=(0.18, 0.21), trunks=(0.26, 0.27), trunkshatch=(0.23, 0.25)),
+    # MAX "THE METRONOME" VOSS — the champion: upright, square, symmetrical, no ornament but one spike
+    "metronome": dict(crest=1, head=(0.27, 0.32), headhatch=(0.20, 0.27), ears=0.8, glove=1.05,
+                      torso=(0.31, 0.28), torsohatch=(0.25, 0.23), trunks=(0.28, 0.30), trunkshatch=(0.25, 0.27)),
+}
+FIGHTER = _os.environ.get("X3_FIGHTER", "rooster")
+LOOK = LOOKS.get(FIGHTER, LOOKS["rooster"])
+ASSET_NAME = "boxer" if FIGHTER == "rooster" else f"boxer_{FIGHTER}"
 FPS = 12
 FWD = "-z"
 MAX_SEGS = 700
@@ -221,11 +259,22 @@ for i in range(5):
     joint(f"crest_{i}", head, -0.16 + i * 0.08, 0.64)  # the hairline, abs z 1.84
 
 # the head: a wide bulldog-jawed oval, chin 1.20 (the pivot), crown 1.90 — 37 % of a 1.9 m figure
-contour("head", ellipse(0.0, 0.35, 0.28, 0.35, 32), "head", MAGENTA, parent=head)
-hatch("hatch_head", ellipse(0.06, 0.30, 0.20, 0.30, 24), "hatch_head", MAGENTA, angle=0.35, parent=head)
+_HR = LOOK["head"]
+contour("head", ellipse(0.0, 0.35, _HR[0], _HR[1], 32), "head", MAGENTA, parent=head)
+hatch("hatch_head", ellipse(0.06, 0.30, LOOK["headhatch"][0], LOOK["headhatch"][1], 24), "hatch_head", MAGENTA, angle=0.35, parent=head)
+if LOOK.get("visor"):
+    # SILK'S VISOR: the one piece of kit on the card, and it is the character. A mirrored band
+    # across the eyes says "nothing shows on him" in a single stroke, and it sits in front of the
+    # pupils the renderer is already refusing to flash for him.
+    # It rides the EYES part, not the head: the exporter holds one colour per part (the head is the
+    # figure's primary, the eyes are white), and the visor is his eyes -- it is the thing that
+    # replaces them. That also puts it on the one part the renderer's palette pass refuses to
+    # repaint, so it stays a mirror whoever is wearing it.
+    poly("visor", [(-_HR[0], 0.44), (_HR[0], 0.44), (_HR[0] * 0.9, 0.33), (-_HR[0] * 0.9, 0.33)], "eyes", "outline", WHITE, closed=True, parent=head)
 # jug ears (their own joints: they flap on a hit), the broken-nose zigzag, six five-o'clock-shadow strokes on the jaw
-poly("ear_L", [(0.0, 0.0), (-0.06, 0.04), (-0.08, -0.06), (-0.02, -0.12)], "ears", parent=_J["ear_L"])
-poly("ear_R", [(0.0, 0.0), (0.06, 0.04), (0.08, -0.06), (0.02, -0.12)], "ears", parent=_J["ear_R"])
+_EK = LOOK["ears"]
+poly("ear_L", [(0.0, 0.0), (-0.06 * _EK, 0.04 * _EK), (-0.08 * _EK, -0.06 * _EK), (-0.02 * _EK, -0.12 * _EK)], "ears", parent=_J["ear_L"])
+poly("ear_R", [(0.0, 0.0), (0.06 * _EK, 0.04 * _EK), (0.08 * _EK, -0.06 * _EK), (0.02 * _EK, -0.12 * _EK)], "ears", parent=_J["ear_R"])
 poly("nose", [(0.00, 0.40), (-0.03, 0.32), (0.03, 0.27), (-0.01, 0.22)], "nose", parent=head)
 for i in range(6):
     x = -0.15 + i * 0.06
@@ -264,19 +313,26 @@ variant("mouth", "crow", poly("mouth_crow", [(-0.10, 0.06), (0.10, 0.06), (0.10,
 variant("mouth", "tongue", _multi("mouth_tongue", [[(-0.12, 0.15), (-0.06, 0.11), (0.06, 0.11), (0.12, 0.16)], [(-0.02, 0.11), (-0.03, 0.04), (0.0, 0.01), (0.03, 0.04), (0.02, 0.11)]],
                                    "mouth", "detail", MAGENTA, head, hidden=True))
 # THE CREST: five tall spikes on their own roots at the hairline, VIOLET at rest, one lost per knockdown
+# A fighter with fewer spikes still gets all five OBJECTS — the parts, the joints and every strip
+# frame must line up across the card, so the absent ones are built and hidden rather than skipped.
 for i in range(5):
-    contour(f"crest_{i}", [(-0.03, 0.0), (0.02 * (i - 2), 0.28), (0.03, 0.0)], f"crest_{i}", VIOLET, closed=False, flash=True, parent=_J[f"crest_{i}"])
+    _vis = LOOK["crest"] > 0 and abs(i - 2) <= (LOOK["crest"] - 1) / 2.0
+    contour(f"crest_{i}", [(-0.03, 0.0), (0.02 * (i - 2), 0.28), (0.03, 0.0)], f"crest_{i}", VIOLET,
+            closed=False, flash=True, parent=_J[f"crest_{i}"], hidden=not _vis)
 # the sweat (four strokes flung off the head) and the stagger's spirals (12 segments each, over the eyes)
 variant("sweat", "on", _obj("sweat", [(-0.30, 0, 0.55), (-0.37, 0, 0.63), (-0.33, 0, 0.42), (-0.42, 0, 0.44), (0.30, 0, 0.55), (0.37, 0, 0.63), (0.33, 0, 0.42), (0.42, 0, 0.44)],
                            [(0, 1), (2, 3), (4, 5), (6, 7)], "sweat", "detail", WHITE, parent=head, hidden=True))
 variant("spirals", "on", _multi("spirals", [spiral(-0.12, 0.40, 0.015, 0.075), spiral(0.12, 0.40, 0.015, 0.075)], "spirals", "detail", WHITE, head, hidden=True))
 # neck, a tiny torso, cyan trunks with a waist stripe (the trunks ride on the hips, the torso on the waist)
 poly("neck", [(-0.08, 0.07), (-0.08, -0.01)], "neck", parent=neck); poly("neck2", [(0.08, 0.07), (0.08, -0.01)], "neck", parent=neck)
-contour("torso", [(-0.25, 0.45), (0.25, 0.45), (0.22, 0.0), (-0.22, 0.0)], "torso", MAGENTA, parent=torso)
-hatch("hatch_torso", [(-0.20, 0.40), (0.20, 0.40), (0.18, 0.04), (-0.18, 0.04)], "hatch_torso", MAGENTA, angle=0.6, parent=torso)
-poly("trunks", [(-0.22, 0.0), (0.22, 0.0), (0.24, -0.25), (-0.24, -0.25)], "trunks", "outline", CYAN, closed=True, parent=hips)
-poly("waist", [(-0.22, -0.04), (0.22, -0.04)], "trunks", "detail", CYAN, parent=hips)
-hatch("hatch_trunks", [(-0.20, -0.02), (0.20, -0.02), (0.22, -0.23), (-0.22, -0.23)], "hatch_trunks", CYAN, angle=-0.5, parent=hips)
+_TW, _TB = LOOK["torso"]
+contour("torso", [(-_TW, 0.45), (_TW, 0.45), (_TB, 0.0), (-_TB, 0.0)], "torso", MAGENTA, parent=torso)
+_TH = LOOK["torsohatch"]
+hatch("hatch_torso", [(-_TH[0], 0.40), (_TH[0], 0.40), (_TH[1], 0.04), (-_TH[1], 0.04)], "hatch_torso", MAGENTA, angle=0.6, parent=torso)
+_TR = LOOK["trunks"]; _TRH = LOOK["trunkshatch"]
+poly("trunks", [(-_TR[0], 0.0), (_TR[0], 0.0), (_TR[1], -0.25), (-_TR[1], -0.25)], "trunks", "outline", CYAN, closed=True, parent=hips)
+poly("waist", [(-_TR[0], -0.04), (_TR[0], -0.04)], "trunks", "detail", CYAN, parent=hips)
+hatch("hatch_trunks", [(-_TRH[0], -0.02), (_TRH[0], -0.02), (_TRH[1], -0.23), (-_TRH[1], -0.23)], "hatch_trunks", CYAN, angle=-0.5, parent=hips)
 # spindly legs and boots — the feet are drawn because the hooks' tell is the feet; the canvas bows under a planted boot
 for side, sx in (("L", -1), ("R", 1)):
     poly(f"leg_{side}", [(0.0, 0.0), (sx * 0.02, -0.20), (sx * 0.01, -0.37)], "legs", parent=_J[f"leg_{side}"])
@@ -294,11 +350,12 @@ for side, sx in (("L", -1), ("R", 1)):
     g = bpy.data.objects.new(f"_j_glove_{side}", None); g.rotation_mode = "XYZ"; _link(g, None); _KEYED.append(g)
     g.location = (sx * 0.30, 0.0, 1.32)
     _GLOVES[side] = g
-    contour(f"glove_{side}", ellipse(0.0, 0.0, 0.24, 0.22, 24), f"glove_{side}", RED, lines=3, flash=True, parent=g)
+    _GK = LOOK["glove"]
+    contour(f"glove_{side}", ellipse(0.0, 0.0, 0.24 * _GK, 0.22 * _GK, 24), f"glove_{side}", RED, lines=3, flash=True, parent=g)
     poly(f"thumb_{side}", ellipse(-sx * 0.14, 0.14, 0.07, 0.06, 10), f"glove_{side}", "detail", RED, closed=True, parent=g)
     for k in range(4):
         poly(f"lace_{side}_{k}", [(sx * 0.02, -0.10 + k * 0.05), (sx * 0.10, -0.09 + k * 0.05)], f"glove_{side}", "detail", RED, parent=g)
-    hatch(f"hatch_glove_{side}", ellipse(0.0, 0.0, 0.20, 0.18, 16), f"hatch_glove_{side}", RED, angle=0.7, parent=g)
+    hatch(f"hatch_glove_{side}", ellipse(0.0, 0.0, 0.20 * _GK, 0.18 * _GK, 16), f"hatch_glove_{side}", RED, angle=0.7, parent=g)
     marker(f"glove_{side}", g, 0.0, 0.0)
 # markers the engine reads: the arc's origin (the gloves, above), the hit spark, your punch's target, the stars
 marker("chin", head, 0.0, 0.0); marker("body", torso, 0.0, 0.22)

@@ -405,8 +405,12 @@ class MainActivity : Activity(), GameHost {
         val hp = if (dbg) (intent?.getIntExtra("hp", 0) ?: 0) else 0
         val drill = if (dbg) intent?.getStringExtra("drill") else null
         val script = if (dbg) intent?.getStringExtra("script") else null
-        val harness = rnd > 0 || fl >= 0f || hp > 0 || drill != null || script != null
+        // `--ei bout N` (1-based) puts a specific man on the card. It counts as a harness: walking
+        // straight into the champion is not a record, and the store must be told before boot.
+        val bout = if (dbg) (intent?.getIntExtra("bout", 0) ?: 0) else 0
+        val harness = rnd > 0 || fl >= 0f || hp > 0 || drill != null || script != null || bout > 0
         if (harness) store.recordsEnabled = false
+        if (bout > 0) game.setBout(bout - 1)
         game.boot()
         music.play()
         if (harness) glView.queueEvent { game.debugStart(rnd.coerceAtLeast(1), fl, hp, drill, script) }
