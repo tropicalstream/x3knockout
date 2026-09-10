@@ -188,7 +188,10 @@ crowd, stray and User voices. The choreography that plays them — the triggers,
 the stillness schedules — is Phase 2 and is not wired yet, so this build is silent but for its
 effects and one music track.
 
-`app/src/main/assets/music/io_tower.mp3` loops under the title and the cell. The track table and
+Five CC BY 4.0 tracks by Kevin MacLeod, brass and drums for an arcade prizefight — a ska horn
+section on the title, trumpet and trombone through the fight, something meaner for round three, 44
+BPM of nothing much for a knockdown count, and a fanfare for the win. Verbatim licence strings in
+`docs/MUSIC.md` and on the in-game CREDITS page. The old track table and
 the credits page with every licence string verbatim arrive with Phase 2.4; the CREDITS row in the
 settings is a placeholder until then.
 
