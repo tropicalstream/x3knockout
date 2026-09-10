@@ -120,6 +120,25 @@ class Fighter(
     val reactMul: Float = 1f,
     /** Standing height on the canvas, so the card is not five men of identical stature. */
     val stature: Float = 1f,
+
+    // ------------------------------------------------------------------ HIS FEET (DESIGN.md §6.2)
+    /**
+     * THE FOOTWORK, in four numbers, and the tactical style built on them.
+     *
+     * [footArc] how far he goes sideways, metres. [footHz] how often. [footWave] the SHAPE, and
+     * it is the one that carries the personality: the gait is `sign(sin u)·|sin u|^p`, so p below
+     * 1 inflates the sine toward a square — long holds at the extremes, a fast crossing, a
+     * SKITTER — and p above 1 shrinks the middle, so he sits on his mark and MARCHES between the
+     * extremes, which is a strut. One exponent spans a flyweight and a showboat.
+     * [footClose] how far he steps IN to throw, driven by the tell's own fraction so the lead
+     * foot lands with the glove, and twice that back OUT on the recover.
+     *
+     * A row of zeroes is the fight that shipped: a man who stands on the mark, exactly.
+     */
+    val footArc: Float = 0f,
+    val footHz: Float = 0f,
+    val footWave: Float = 1f,
+    val footClose: Float = 0f,
     /**
      * HIS THREE ROUNDS HAVE HIS OWN NAMES. The round card is the one moment the game gets to say
      * something about a man before he hits you, and "THE STRUT" over the Anvil is a card announcing
@@ -434,6 +453,7 @@ class Fighter(
         /** #1 — the grammar. Unchanged: every number is the one the owner has already played. */
         val ROOSTER = Fighter(
             id = "rooster", name = "THE ROOSTER", billing = "ROY RUDD - THE STRUTTING CHAMPION OF NOWHERE",
+            footArc = 0.34f, footHz = 0.26f, footWave = 1.6f, footClose = 0.16f,
             lowMul = 1.00f,
             rank = 4, story = "WIN AND YOU ARE RANKED. LOSE AND YOU GO HOME UNKNOWN.",
             asset = "boxer", hp = intArrayOf(100, 120, 140),
@@ -444,6 +464,7 @@ class Fighter(
 
         val SARDINE = Fighter(
             id = "sardine", name = "THE SARDINE", billing = "SAL MARINO - NEVER THROWS JUST ONE",
+            footArc = 0.30f, footHz = 1.35f, footWave = 0.30f, footClose = 0.22f,
             lowMul = 0.60f,
             rank = 3, story = "THEY SAY YOU GOT LUCKY ONCE. SAL THROWS UNTIL THEY BELIEVE IT.",
             asset = "boxer_sardine", hp = intArrayOf(110, 130, 150),
@@ -459,6 +480,7 @@ class Fighter(
 
         val ANVIL = Fighter(
             id = "anvil", name = "THE ANVIL", billing = "DUKE ODELL - HE WAITS FOR YOU TO SWING",
+            footArc = 0.09f, footHz = 0.18f, footWave = 1.0f, footClose = 0.10f,
             lowMul = 1.60f, lowBlows = 2,
             rank = 2, story = "NOBODY GOES THROUGH DUKE ODELL. THEY GO AROUND HIM.",
             asset = "boxer_anvil", hp = intArrayOf(150, 180, 210),
@@ -474,6 +496,7 @@ class Fighter(
 
         val SILK = Fighter(
             id = "silk", name = "SILK", billing = "SORENSEN - NOTHING SHOWS ON HIM",
+            footArc = 0.66f, footHz = 0.21f, footWave = 1.0f, footClose = 0.30f,
             lowMul = 1.00f,
             rank = 1, story = "ONE MAN BETWEEN YOU AND THE TITLE. NOTHING SHOWS ON HIM.",
             asset = "boxer_silk", hp = intArrayOf(120, 145, 170),
@@ -489,6 +512,7 @@ class Fighter(
 
         val METRONOME = Fighter(
             id = "metronome", name = "THE METRONOME", billing = "MAX VOSS - HE KEEPS YOUR TIME",
+            footArc = 0.40f, footHz = 0.50f, footWave = 1.0f, footClose = 0.14f,
             lowMul = 1.15f,
             rank = 0, story = "TWELVE YEARS. NOBODY HAS TAKEN A ROUND OFF HIM.",
             asset = "boxer_metronome", hp = intArrayOf(140, 170, 200),

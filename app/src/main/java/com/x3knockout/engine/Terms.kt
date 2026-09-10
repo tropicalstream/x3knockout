@@ -28,7 +28,8 @@ enum class Answer { NONE, SLIP_L, SLIP_R, DUCK, GUARD, STEP }
  * line INSIDE the strike (+300, hearts, +3 meter, the counter window); BLOCK is a guard that
  * held; CRUSH is a guard a hook went through (half damage, guard forced down 0.4 s).
  */
-enum class StrikeResult { HIT, GLANCE, CLEAN, PERFECT, BLOCK, CRUSH }
+/** …plus SHORT: he threw from too far out and it never arrived. See `Boxer.HIS_REACH`. */
+enum class StrikeResult { HIT, GLANCE, CLEAN, PERFECT, BLOCK, CRUSH, SHORT }
 
 /**
  * The verdict on YOUR punch (the `PUNCH result=` key): LAND on an open target; GUARD into his
@@ -36,7 +37,7 @@ enum class StrikeResult { HIT, GLANCE, CLEAN, PERFECT, BLOCK, CRUSH }
  * COUNTER inside the perfect window; STAGGER landed on a staggered boxer (× 2); KNOCKDOWN when
  * it dropped him; WINDED never thrown — no hearts.
  */
-enum class PunchResult { LAND, GUARD, AIR, COUNTER, STAGGER, KNOCKDOWN, WINDED }
+enum class PunchResult { LAND, GUARD, AIR, COUNTER, STAGGER, KNOCKDOWN, WINDED, SHORT }
 
 /** Who is on the canvas. */
 enum class Who { HIM, YOU }

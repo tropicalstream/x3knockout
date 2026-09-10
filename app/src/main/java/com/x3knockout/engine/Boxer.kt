@@ -4,12 +4,16 @@ import com.x3knockout.audio.Sfx
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * ROY "THE ROOSTER" RUDD — the one boxer (BOXER.md), as a state machine on WORLD time.
@@ -72,9 +76,65 @@ class Boxer {
 
     companion object {
         // ---------------------------------------------------------------- where he stands
-        /** World-locked in the ring, 2.6 m ahead, 1.9 m tall at that range (DESIGN.md §6, §7.3). */
+        /**
+         * THE MARK — the ring's own reference, and the player's nominal stance. It is NOT where
+         * the man is any more (see [footX] / [footZ]); it is the zero of the polar coordinate
+         * system his feet live in, the point the ring is built around, and the point the referee's
+         * marks are measured from.
+         */
         const val X = 0f
         const val Z = -2.6f
+        /** His holding distance from the mark. `(lat, range) = (0, REST_RANGE)` is exactly [X], [Z]. */
+        const val REST_RANGE = 2.6f
+        // ---------------------------------------------------------------- HIS FEET (DESIGN.md §6.2)
+        /**
+         * HOW FAR ROUND HE MAY GET, and it is DERIVED rather than tuned: the binding constraint
+         * is not the frustum, it is the plate's own right rail at x 612 of 640 (`Hud.RAIL_R_X`),
+         * projected through the tangent — `atan((272/320)·tan(38.7°))` = 34.25°, rounded down.
+         * A man who walks out from behind the HUD is a bug the player cannot do anything about.
+         */
+        const val EDGE_RAD = 0.58f
+        /** His own silhouette's half-width, subtracted from the edge so his SHOULDER stays inboard. */
+        const val HALF_W = 0.30f
+        /** The last 25 cm before the edge fades the gait's amplitude instead of clamping its position. */
+        const val VIS_SOFT = 0.25f
+        /** The net, never the wall: the soft fade above is what he should actually feel. */
+        const val LAT_MAX = 0.66f
+        /** The two integrators' time constants, world seconds. Lateral is the quicker: feet move. */
+        const val LAT_TAU = 0.075f
+        const val RANGE_TAU = 0.11f
+        const val RANGE_MIN = 2.20f
+        const val RANGE_MAX = 3.30f
+        /** A recover or a feint puts him back OUT this multiple of his step-in. */
+        const val FOOT_OUT_K = 2.0f
+        /** A landed punch knocks him back this far, scaled by [Fighter.reactMul]. */
+        const val KNOCK_BACK = 0.18f
+        /**
+         * THE TWO REACHES, as SLACK on [REST_RANGE] — so at the shipped distance both are false
+         * and nothing about the fight changes until somebody's feet move. His is short because he
+         * steps in to throw; yours is long because you are the one standing still.
+         */
+        const val HIS_REACH = 0.22f
+        const val YOUR_REACH = 0.55f
+        /** THE ANVIL cuts the ring: every evasion of yours costs this much of it, and he never gives it back. */
+        const val RATCHET_M = 0.055f
+        const val RATCHET_MIN = 2.20f
+        /** …except to a landed body blow. Standing in is the answer to being walked down. */
+        const val RATCHET_BACK = 0.20f
+        /** THE SARDINE boils: each chained shot inside a phrase closes another 7 cm, three deep. */
+        const val FLURRY_CREEP = 0.07f
+        const val FLURRY_CREEP_MAX = 0.21f
+        /** THE METRONOME mirrors you: this much of your own displacement, this much of the blend, eased. */
+        const val MIRROR_K = 0.80f
+        const val MIRROR_MIX = 0.75f
+        const val MIRROR_TAU = 0.50f
+        /** SILK plants: 6 cm of counter-motion over 0.08 world seconds — a SHAPE cue, not a light one. */
+        const val PLANT_SETTLE = 0.06f
+        const val PLANT_T = 0.08f
+        /** The billboard yaw eases over this in REAL seconds: a frozen man who never turns is cardboard. */
+        const val YAW_T = 0.15f
+        /** He walks back to his mark over this in REAL seconds — the count runs the world at 0. */
+        const val RISE_RESET_T = 0.9f
         const val HEIGHT = 1.9f
         const val GLOVE_R = 0.24f
         /** He re-squares to the player's yaw over this when they look away and back. */
@@ -539,6 +599,42 @@ class Boxer {
     var lowOpen = true; private set
     /** This stagger's own cap: a work-stagger must not inflate back to a read-stagger's ceiling. */
     var staggerCapNow = 0f; private set
+
+    // ------------------------------------------------------------------ HIS FEET (DESIGN.md §6.2)
+    /**
+     * WHERE HE IS STANDING, in polar about THE MARK — signed metres to the player's right, and
+     * metres from the mark. `(0, REST_RANGE)` is byte-identical to the fight that shipped, which
+     * is the property that lets a fighter with a null footwork row be unchanged.
+     *
+     * POLAR ABOUT THE MARK AND NOT ABOUT THE EYE, deliberately: the player's head swings ±1.10 m
+     * on a lean and a step, and a man who orbited the live eye would be dragged along by every
+     * dodge — the dodge would move the world instead of moving the player, which is both useless
+     * and, on a head-tracked display, unpleasant.
+     */
+    var lat = 0f; private set
+    var range = REST_RANGE; private set
+    /** His gait's own phase, advanced on WORLD time and ONLY while he is uncommitted. */
+    private var gaitT = 0f
+    /** Where the ratchet has walked his holding distance to (the Anvil), and the flurry's creep. */
+    private var restRange = REST_RANGE
+    private var creep = 0f
+    /** The mirror's eased target (the Metronome) and the plant's settle (Silk). */
+    private var mirror = 0f
+    private var plantLeft = 0f
+    /** The last body [update] saw, so `punch()` can measure a separation without a new parameter. */
+    private val lastBody = Body()
+    /** Frozen where he fell, so the count and the referee's mark agree with the picture. */
+    private var downX = 0f
+    private var downZ = -REST_RANGE
+    private var riseLeft = 0f
+    /** THE POSITION EVERYTHING DRAWS AND EVERYTHING MEASURES. */
+    val footX: Float get() = lat
+    val footZ: Float get() = -sqrt(max(range * range - lat * lat, 0.25f))
+    /** His separation from the player's head, which is what both reach tests read. */
+    fun separation(body: Body): Float {
+        val dx = footX - body.headX; val dz = footZ - body.headZ
+        return sqrt(dx * dx + dz * dz)
+    }
     var staggerLeft = 0f; private set
     var stunLeft = 0f; private set
     /** After a stagger in R2+, the next attack is always the Sunrise. */
@@ -708,6 +804,8 @@ class Boxer {
         for (name in pool) if (name !in order) order.add(name)
         guardOpenLeft = 0f; guardOpenBy = ""; bodyBlowsInWindow = 0
         tuckLeft = 0f; tuckBy = ""; lowBlowsLeft = 0; lowOpen = true; staggerCapNow = 0f
+        lat = 0f; range = REST_RANGE; gaitT = 0f; restRange = REST_RANGE; creep = 0f
+        mirror = 0f; plantLeft = 0f; riseLeft = 0f; downX = 0f; downZ = -REST_RANGE; yaw = 0f
         staggerLeft = 0f; staggerTotal = 0f; shaking = false; stunLeft = 0f; stunT = 0f; openStep = false
         pecksOnlyLeft = 0f; suckerArmed = false; perfectAttack = null
         stallT = 0f; stallFired = false; nextTellMul = 1f; stillInFuse = false
@@ -820,6 +918,8 @@ class Boxer {
         if (guardOpenLeft > 0f) { guardOpenLeft = dec(guardOpenLeft, w); if (guardOpenLeft <= 0f) bodyBlowsInWindow = 0 }
         if (tuckLeft > 0f) { tuckLeft = dec(tuckLeft, w); if (tuckLeft <= 0f) { tuckBy = ""; lowBlowsLeft = 0 } }
         if (pecksOnlyLeft > 0f) pecksOnlyLeft = dec(pecksOnlyLeft, w)
+        lastBody.headX = body.headX; lastBody.headY = body.headY; lastBody.headZ = body.headZ
+        feet(w, r, body)
         stepPhase(w, r, body)
 
         syncGuard()
@@ -886,9 +986,109 @@ class Boxer {
      * not turn with a leaning player reads as a cardboard cut-out). The look-away dim itself is
      * the renderer's — it has the head yaw; this class only has where the body went.
      */
+    /**
+     * HIS FEET, and the tactical style built on them — out-fighting, "stick and move" (DESIGN.md
+     * §6.2). Called from the WORLD half of [update], so a still player sees a still man, feet
+     * included: at the floor his gait crawls at 3 % and a circling opponent is as frozen as a
+     * thrown glove. There is no randomness in here at all — the gait is a pure function of
+     * [gaitT], the phase, and where the player is standing.
+     *
+     * THE PHASE GATE IS THE WHOLE OF "STICK AND MOVE", and it costs no new state because the
+     * state machine already has every phase it needs. **He never travels laterally while there
+     * is something to read**: the moment a tell begins the sideways component freezes and the
+     * only motion left is the step IN, driven by the tell's own fraction so the lead foot lands
+     * with the glove. Through the strike he is held exactly where the tell left him — a target
+     * that slides while you are reading it is not a target, it is a lottery — and it is the
+     * RECOVER, when he is already open, that walks him back out.
+     *
+     * THE ARC LIMIT IS DERIVED. [EDGE_RAD] comes off the plate's own right rail, not off taste,
+     * and his silhouette's half-angle is subtracted from it so his SHOULDER stays inboard rather
+     * than his centre. The last [VIS_SOFT] fades the gait's AMPLITUDE instead of clamping its
+     * position, because a hard clamp against a player who has stepped and leaned bites every
+     * frame and reads as a ball bouncing off a wall.
+     */
+    private fun feet(w: Float, r: Float, body: Body) {
+        // the count and the fall: he is where he fell, and he walks home on REAL time (the count
+        // runs the world at rate 0, so a world-time reset would never finish)
+        if (down) { riseLeft = RISE_RESET_T; return }
+        if (riseLeft > 0f) {
+            riseLeft = max(0f, riseLeft - r)
+            val k = 1f - exp(-r / (RISE_RESET_T * 0.35f))
+            lat += (0f - lat) * k
+            range += (restRange - range) * k
+            return
+        }
+        val f = fighter
+        val u = if (phase == Phase.HIT) under else phase
+        val committed = u == Phase.TELL || u == Phase.STRIKE || u == Phase.HIT ||
+            u == Phase.STAGGER || u == Phase.STUN
+        if (!committed) gaitT += w
+
+        // ---- the lateral target: the gait, then the man's own gimmick, then the edge
+        var latWant = lat
+        if (!committed && f.footArc > 0f) {
+            val u2 = 2f * PI.toFloat() * f.footHz * gaitT
+            val sn = sin(u2)
+            val shaped = (if (sn < 0f) -1f else 1f) * abs(sn).pow(f.footWave)
+            latWant = f.footArc * shaped
+        }
+        if (f.gimmick == Fighter.Gimmick.TEMPO && !committed) {
+            // HE KEEPS YOUR TIME, and your position: three quarters of his target is your own
+            // displacement, so the ring you thought you were taking closes behind you.
+            mirror += (MIRROR_K * body.headX - mirror) * (1f - exp(-w / MIRROR_TAU))
+            latWant = MIRROR_MIX * mirror + (1f - MIRROR_MIX) * latWant
+        }
+        // the derived arc limit, in the EYE's frame, faded rather than clamped
+        val zf = -footZ
+        val edge = EDGE_RAD - asin((HALF_W / max(range, 1.5f)).coerceIn(-1f, 1f))
+        val room = tan(edge) * zf - abs(latWant - body.headX)
+        if (room < VIS_SOFT) latWant *= (room / VIS_SOFT).coerceIn(0f, 1f)
+
+        // ---- the range target: the phase gate
+        var rangeWant = restRange
+        var driven = false
+        when (u) {
+            Phase.TELL -> {
+                val frac = if (tellDur > 0f) (phaseT / tellDur).coerceIn(0f, 1f) else 1f
+                val sm = frac * frac * (3f - 2f * frac)
+                rangeWant = restRange - f.footClose * sm - creep
+                range = rangeWant.coerceIn(RANGE_MIN, RANGE_MAX)   // DRIVEN: the foot lands with the glove
+                driven = true
+            }
+            Phase.STRIKE -> { driven = true }                       // held exactly where the tell left him
+            Phase.RECOVER, Phase.FEINT -> rangeWant = restRange + f.footClose * FOOT_OUT_K
+            Phase.HIT, Phase.STAGGER, Phase.STUN -> rangeWant = restRange + KNOCK_BACK * f.reactMul
+            else -> rangeWant = restRange
+        }
+        if (plantLeft > 0f) { plantLeft = max(0f, plantLeft - w); rangeWant += PLANT_SETTLE }
+
+        // ---- the integrators
+        if (!committed) lat += (latWant - lat) * (1f - exp(-w / LAT_TAU))
+        lat = lat.coerceIn(-LAT_MAX, LAT_MAX)
+        if (!driven) range += (rangeWant - range) * (1f - exp(-w / RANGE_TAU))
+        range = range.coerceIn(RANGE_MIN, RANGE_MAX)
+    }
+
+    /** THE ANVIL cuts the ring: your evasion costs him nothing and costs you 5.5 cm of it. */
+    private fun ratchet() {
+        if (fighter.gimmick != Fighter.Gimmick.COUNTER) return
+        restRange = max(RATCHET_MIN, restRange - RATCHET_M)
+    }
+
+    /** …and a body blow is how you buy it back. Standing in is the answer to being walked down. */
+    private fun ratchetBack() {
+        if (fighter.gimmick != Fighter.Gimmick.COUNTER) return
+        restRange = min(REST_RANGE, restRange + RATCHET_BACK)
+    }
+
+    /**
+     * The billboard heading, eased on REAL time and aimed at his LIVE position. This used to be
+     * computed from the two constants and read by nothing at all — the renderer took an
+     * instantaneous atan2 instead, which snaps the moment the man himself is translating.
+     */
     private fun resquare(body: Body, r: Float) {
-        val target = atan2(-(body.headX - X), -(body.headZ - Z))
-        yaw += (target - yaw) * (1f - exp(-r / RESQUARE_T))
+        val target = atan2(-(body.headX - footX), -(body.headZ - footZ))
+        yaw += (target - yaw) * (1f - exp(-r / YAW_T))
     }
 
     /**
@@ -1006,6 +1206,9 @@ class Boxer {
      * Branches and awards cost nothing and are consumed in place. The loop is bounded so a
      * table that is all branches can never spin a frame.
      */
+    /** Silk plants after a landed shot: a shape cue, not a light cue, which is the honest kind. */
+    private fun plant() { if (fighter.footClose >= 0.30f) plantLeft = PLANT_T }
+
     private fun runPattern(w: Float, body: Body) {
         // ---------------------------------------------------------------- THE ANVIL'S ANSWER
         // It goes FIRST, ahead of the wait and the phrase, because a counter that queues politely
@@ -1186,7 +1389,12 @@ class Boxer {
         // THE FLURRY takes its bite out of the CHAINED shots only — the ones the phrase authored a
         // short tell for. Shortening his opening shot too would just make him a fast boxer; taking
         // it out of the follow-ups is what makes the PHRASE the punch rather than the shot.
-        if (fighter.gimmick == Fighter.Gimmick.FLURRY && override >= 0f) base *= fighter.gimmickK
+        if (fighter.gimmick == Fighter.Gimmick.FLURRY && override >= 0f) {
+            base *= fighter.gimmickK
+            // HE BOILS: each chained shot closes another 7 cm, three deep, and gives it all back
+            // when the phrase ends. A four-shot R3 chain finishes in your face.
+            creep = min(FLURRY_CREEP_MAX, creep + FLURRY_CREEP)
+        }
         tellDur = (base * fighter.tellMul * TELL_MUL_DIFF[d] * nextTellMul).coerceAtLeast(0.05f)
         nextTellMul = 1f
         strikeDur = ((atk.strikeT + STRIKE_DELTA[round - 1]) * fighter.strikeMul).coerceAtLeast(0.1f)
@@ -1239,6 +1447,16 @@ class Boxer {
      */
     private fun contact(body: Body) {
         val atk = attack ?: return
+        // HE THREW FROM TOO FAR OUT. The one geometric term in a collider that is otherwise
+        // authored entirely in the player's frame: the band table below decides WHICH WAY you had
+        // to move, and that must never depend on where he is standing — only WHETHER he could
+        // reach you at all does. `HIS_REACH` is slack on the rest range, so at the distance the
+        // fight shipped at this branch is false and nothing changes.
+        if (separation(body) > REST_RANGE + HIS_REACH) {
+            listener?.onStrike(atk, Answer.NONE, StrikeResult.SHORT, 0)
+            beginRecover()
+            return
+        }
         val band = atk.band
         val posture = when {
             body.stepping || chainedAfterStep -> Answer.STEP
@@ -1254,6 +1472,9 @@ class Boxer {
         val hClear = dx >= band.reach
         val hGlance = dx >= band.hit
         var answer = posture
+        // THE ANVIL CUTS THE RING on every evasion, read straight off the posture the collider
+        // already computed. He never gives it back except to a body blow (see [ratchetBack]).
+        if (posture != Answer.NONE) ratchet()
         val result = when {
             posture == Answer.STEP -> StrikeResult.CLEAN
             vClear || hClear -> if (onLineAtStrike) StrikeResult.PERFECT else StrikeResult.CLEAN
@@ -1485,6 +1706,9 @@ class Boxer {
      * round stop it (TKO — logged, treated as a KO: he does not rise). [Listener.onKnockdown]
      * fires from inside the punch that dropped him.
      */
+    /** Where he went down, so the count, the referee's mark and the picture all agree. */
+    fun downSpot(out: FloatArray) { out[0] = downX; out[1] = downZ }
+
     private fun knockdown(ko: Boolean, why: String) {
         knockdownsFight++; knockdownsRound++
         val n = knockdownsFight
@@ -1496,6 +1720,7 @@ class Boxer {
         abandon()
         guardOpenLeft = 0f; bodyBlowsInWindow = 0; stunLeft = 0f; staggerLeft = 0f; shaking = false; hitLeft = 0f
         tuckLeft = 0f; tuckBy = ""; lowBlowsLeft = 0
+        downX = footX; downZ = footZ                  // he falls where he stood, and stays there
         downT = 0f
         enter(Phase.KNOCKDOWN)
         if (tko && !ko) log?.invoke("TKO round=$round knockdowns=$knockdownsRound")
@@ -1632,10 +1857,14 @@ class Boxer {
      *     it; everything else shows the reaction over whatever he was doing.
      *  5. The ladder: crossing 80 / 40 / 0 of his max drops him ([knockdown]).
      */
-    fun punch(hand: Hand, level: Level, dmg: Int, counter: Boolean, special: Boolean): Outcome {
+    fun punch(hand: Hand, level: Level, dmg: Int, counter: Boolean, special: Boolean, body: Body = lastBody): Outcome {
         outcome.clear()
         val u = if (phase == Phase.HIT) under else phase
         if (u == Phase.TAUNT || u == Phase.WIN || down) { outcome.result = PunchResult.AIR; return outcome }
+        // YOU THREW FROM TOO FAR OUT. No lean bonus: a lean already moves `body.headX` and so
+        // already moves the separation, in whichever direction the geometry says. Adding a reach
+        // bonus on top would charge the lean twice.
+        if (separation(body) > REST_RANGE + YOUR_REACH) { outcome.result = PunchResult.SHORT; return outcome }
         val inDrill = drill != Drill.OFF
         val staggered = u == Phase.STAGGER && !shaking
         val stunned = u == Phase.STUN && !openStep
@@ -1718,6 +1947,7 @@ class Boxer {
                     val opened = !guardOpen
                     openGuard(GUARD_OPEN_BODY[round - 1], "BODY", blows = bodyBlowsInWindow + 1)
                     tuck("BODY")                                  // the same blow writes both timers
+                    ratchetBack()                                 // and buys back the ring he cut
                     outcome.opened = opened
                     hitOverlay(level, interrupts)
                 }
@@ -1732,8 +1962,8 @@ class Boxer {
 
     /** The 5 Hz `VERIFY` half that is his: state, strip:frame, HP, guard, the floor, the aim vs the capsule. */
     fun verifyLine(body: Body, floor: Float): String =
-        "VERIFY him=%s atk=%s strip=%s:%d hp=%d/%d guard=%s low=%s stagger=%.2f stun=%.2f hang=%.2f fuse=%.2f floor=%.2f aim=(%+.2f,%.2f) cap=(%+.2f,%.2f..%.2f) phrase=%s".format(
-            Locale.US, phase.name, attack?.name ?: "-", strip.name, strip.local, hp, hpMax, if (guardOpen) "OPEN" else "UP", if (lowOpen) "OUT" else "IN",
+        "VERIFY him=%s atk=%s strip=%s:%d hp=%d/%d guard=%s low=%s pos=(%+.2f,%+.2f) rng=%.2f stagger=%.2f stun=%.2f hang=%.2f fuse=%.2f floor=%.2f aim=(%+.2f,%.2f) cap=(%+.2f,%.2f..%.2f) phrase=%s".format(
+            Locale.US, phase.name, attack?.name ?: "-", strip.name, strip.local, hp, hpMax, if (guardOpen) "OPEN" else "UP", if (lowOpen) "OUT" else "IN", footX, footZ, range,
             staggerLeft, stunLeft, hangLeft, fuseLeft, floor, aimX, aimY, body.headX, body.bottom, body.top, phraseName.ifEmpty { "-" })
 
     // ================================================================== INTERNALS: the phase's entry, the strip, the picture

@@ -213,6 +213,98 @@ The full script is `docs/VOICE.md` §6.6, and `CareerTest` is the proof that the
 
 ---
 
+## 0.3 HIS FEET — footwork, and out-fighting (the owner, 2026-09-10)
+
+> *"make sure opposing boxers have footwork (or lateral movement), and the tactical style built
+> around it is known as out-fighting or 'stick-and-move' as well as flamboyent footwork based on
+> their personality."*
+
+**HE STOOD ON ONE SPOT FOR THE WHOLE PROJECT.** `Boxer.X = 0f` and `Boxer.Z = -2.6f` were compile-
+time constants; there was no position state, no integrator and no movement code anywhere, and
+about forty-five call sites read those two constants or quietly assumed they never changed.
+
+**THE MODEL: POLAR ABOUT THE MARK.** Two floats and a gait phase. `lat` is signed metres to the
+player's right, `range` is metres from the mark, and `footX = lat`, `footZ = -√(range² - lat²)`.
+At `(0, 2.6)` that is byte-identical to the two constants, so a fighter with a null footwork row
+is the fight that shipped — the same property that made it safe to give the Rooster a `Fighter`
+row in the first place.
+
+Polar about **THE MARK** and never about the live eye: the player's head swings ±1.10 m on a lean
+and a step, and a man who orbited the eye would be dragged along by every dodge. The dodge would
+move the world instead of moving the player, which is useless and, on a head-tracked display,
+unpleasant.
+
+**BOTH INTEGRATORS ARE ON WORLD TIME.** Non-negotiable, and the first thing to check if any of
+this is ever touched: his feet are called from the world half of `Boxer.update`, so a still player
+sees a still man — at the floor his gait crawls at 3 % exactly like a thrown glove. A boxer
+walking on real time would be the one hostile thing in the game outside the bubble.
+
+### 0.3.1 The phase gate IS stick-and-move
+
+**He never travels laterally while there is something to read.** The sideways component freezes
+the moment a tell begins and stays frozen through the strike; a target that slides while you are
+reading it is not a target, it is a lottery. What moves during a tell is the step **IN**, and it
+is *driven* by the tell's own fraction rather than chased by a filter, so the lead foot lands with
+the glove and no desync is possible. The **RECOVER** — when he is already open — is what walks him
+back out.
+
+| phase | his range |
+|---|---|
+| TELL | `restRange − footClose · smoothstep(tellFrac) − creep`, driven |
+| STRIKE | held exactly where the tell left him |
+| RECOVER, FEINT | `restRange + footClose × 2` |
+| HIT, STAGGER, STUN | `restRange + 0.18 × reactMul` |
+| KNOCKDOWN → GETUP | frozen where he fell; he walks home over 0.9 **real** seconds (the count runs the world at 0) |
+
+### 0.3.2 The arc limit is derived, not tuned
+
+The binding constraint is **not** the frustum, it is the plate's own right rail at x 612 of 640:
+`atan((272/320)·tan 38.7°)` = 34.25°, rounded down to `EDGE_RAD` 0.58 rad. His silhouette's
+half-angle is then subtracted from it, so his **shoulder** stays inboard rather than his centre,
+and the last 25 cm **fades the gait's amplitude** instead of clamping its position — a hard clamp
+against a player who has stepped and leaned bites every frame and reads as a ball bouncing off a
+wall. A man who walks out from behind the HUD is a bug the player can do nothing about.
+
+### 0.3.3 The five styles
+
+`footArc` is how far, `footHz` how often, `footWave` the SHAPE — the gait is
+`sign(sin u)·|sin u|^p`, so p below 1 inflates the sine toward a square (long holds, a fast
+crossing: a **skitter**) and p above 1 shrinks the middle (he sits on his mark and marches: a
+**strut**). One exponent spans a flyweight and a showboat.
+
+| | style | arc · Hz · wave · close | what his feet say |
+|---|---|---|---|
+| THE ROOSTER | **the strut** | 0.34 · 0.26 · 1.6 · 0.16 | he dwells on his mark and marches between the extremes; ±7.5°, and his feet are a fifth telegraph channel, never the thing that beats you |
+| THE SARDINE | **the skitter** | 0.30 · 1.35 · 0.30 · 0.22 | he does not circle, he DARTS: the highest peak speed on the card out of the smallest amplitude, and he BOILS — each chained shot closes another 7 cm, three deep |
+| THE ANVIL | **he cuts the ring** | 0.09 · 0.18 · 1.0 · 0.10 | 2° of lateral is not movement, it is WEIGHT. His footwork is a RATCHET on the other axis: every evasion of yours costs 5.5 cm of ring and he never gives it back — except to a body blow. Standing in is the answer to being walked down. |
+| SILK | **the out-fighter** | 0.66 · 0.21 · 1.0 · 0.30 | the fight this whole feature exists for. He genuinely circles you, and his recover-out (0.60 m) is the only one on the card that exceeds your reach slack: he lands and LEAVES, and for a beat afterwards your punch scores SHORT. He is `QUIET`, so **distance is the only tell he has left**. |
+| THE METRONOME | **he keeps your time** | 0.40 · 0.50 · 1.0 · 0.14 | 0.50 Hz is exactly his `bobHz`, so the bounce you have watched all fight becomes a FOOTSTEP. Three quarters of his lateral target is your own displacement, and his feet inherit his TEMPO clock for free — stand still and they crawl; move and they are the fastest on the card. |
+
+### 0.3.4 Two reaches, and why "looking is free" had to ship first
+
+Both are expressed as **slack on the rest range**, so at the distance the fight shipped at each is
+false and nothing changes until somebody's feet move. His is 0.22 m (he steps in to throw), yours
+is 0.55 m (you are the one standing still). Over it: `StrikeResult.SHORT` and `PunchResult.SHORT`,
+each with its own word on the glass, because *"why did that do nothing"* has to have an answer.
+There is deliberately **no lean bonus**: a lean already moves `body.headX` and therefore already
+moves the separation, and paying it twice is the same double-charge the guard model refuses.
+
+**AND THE PREREQUISITE.** A man who circles MAKES the player turn their head, and the clock
+charged the raw gyro magnitude — it could not tell a slip from a look. Measured on the shipping
+constants, tracking the Sardine's dart would have charged rate 0.123 against a floor of 0.03, and
+tracking the Metronome 0.437: **fourteen times the floor, paid continuously, for keeping the man
+who is punching you in frame.** LAW.md §1.3's axis split ships in the same commit — yaw at 0.15,
+pitch and roll (which ARE the dodge collider) in full — and without it this feature would have
+inverted the mechanic it belongs to.
+
+**Known and accepted:** the FX capture points (`headRingAt`, `sparkAt`, `whooshAt`) are sampled in
+`tick()` before `boxerScene` writes his placement, so an impact ring is one frame — under 4 cm at
+the fastest gait on the card — behind him. `stall()` is deliberately unchanged: it is gated on
+`Body.moving`, so a player turning to follow a circling man is not still and is not booed, while a
+player who refuses to turn against Silk **is** still and correctly is.
+
+---
+
 ## 1. THE VERBS
 
 ### 1.1 The founding observation
@@ -689,6 +781,16 @@ cannot aim). Punches thrown while ducked below 0.35 go to the body (§1.3); the 
 covered by his gloves, so a body blow lands through a closed guard and OPENS it (§4.3).
 
 ### 4.3 His guard
+
+> **AMENDED 2026-09-10 — HE HAS ELBOWS (the owner: *"make the defense (especially torso defense)
+> of the opposition more balanced"*).** Everything in this section described the HIGH guard, and
+> the code implemented only that: `punch()` tested `level == Level.HEAD && !open`, and there was
+> no `Level.BODY` branch anywhere in the guard logic. A body punch had never once been tested
+> against a guard. It landed in every state, always opened him, and a second one inside that
+> window always staggered him — **nine right hands to the ribs TKO the Rooster from the opening
+> bell without ever reading a tell**, and the man whose entire lesson is DO NOT THROW could be
+> beaten by throwing. §4.3.2 below is the missing half.
+
 Neutral stance: both gloves up over his face, drawn overlapping his jaw — the additive overlap
 makes the closed guard visibly BRIGHTER, which is the readable "closed" state for free (§7). While
 it is up, head punches do 0, cost a heart (§4.4), spend the full whiff-length `Forced.PUNCH`, and
@@ -704,6 +806,53 @@ draw a cyan spark at his glove with "That all you got?" at most once per 6 s rea
 
 The guard re-closes on WORLD time, so it closes exactly as fast as you spend time punching: **the
 guard closes on your own punches.**
+
+### 4.3.2 THE LOW GUARD — his elbows (2026-09-10)
+
+**ONE PAIR OF ARMS, TWO THINGS TO COVER.** The gloves are up at his jaw and the elbows are down at
+his ribs, and what drives one into place takes the other out of it. That is the whole model, and
+it is why the fix needed no new phase, no new forced state and no new art.
+
+`Boxer.TUCK_BODY` is **character-for-character the same array literal** as `GUARD_OPEN_BODY`
+(0.6 / 0.5 / 0.4 world seconds by round) and `LowGuardTest` asserts they stay equal. That equality
+is the invariant, and it is the whole design in one sentence:
+
+> **His elbows are in for exactly as long as his gloves are out.**
+
+Both timers are written by the same blow on the same frame, so a second body blow can never arrive
+inside the window the first one opened. The two-punch body stagger becomes the **three-punch
+BODY–HEAD–BODY** — a combination rather than a mash — and not one damage number, window length or
+stagger constant moved to achieve it.
+
+| the rule | what it does |
+|---|---|
+| **one predicate** | `openAt(level, u)`. The head's answer is unchanged everywhere in the game: the closed set is still exactly {IDLE with no window} and {the stagger's straightening SHAKE}. |
+| **his hands are busy** | TELL / STRIKE / FEINT are open at BOTH levels — that is the law of one pair of arms, and it is why interrupting a tell is still the cleanest thing in the game. |
+| **mid-action banks nothing** | …but a body blow in a tell lands, interrupts, and opens NO window, counts NO blow, tucks NOTHING. Busy is not the same as down. |
+| **a head punch untucks** | landed or blocked, because it is the same motion either way. This is what makes a punch into the closed high guard something other than a pure tax: it costs a heart and half a world second, and it buys you the ribs. |
+| **the hold** | a body punch refused by the elbows refreshes them to half a tuck. He saw that; he is staying there. A correct read never triggers it. |
+| **the work-stagger** | a stagger earned by body work is HALF a read-stagger in length and in cap (`BODY_STAGGER_FRAC`). The perfect dodge, the special and the counter-on-the-Sunrise are reads and keep the whole of it. |
+| **the special** | hoisted and level-blind: into a closed guard at either level it deals 0 and only opens him, which is what §4.5 always said and what the code contradicted. |
+| **the guard-counter is still the express route** | blocking his low hook does NOT tuck him, so ONE body blow then folds him for a FULL stagger. It is the reward for the read BOXER.md §5 already names. |
+
+**PER FIGHTER.** `lowMul` scales the tuck on top of `openMul`; `lowBlows` is how many head punches
+bring the elbows out, and it is the knob that actually keeps the five apart, because untucking is
+a CLEAR and not a decrement.
+
+| | lowMul | lowBlows | what it makes him |
+|---|---|---|---|
+| THE ROOSTER | 1.00 | 1 | the grammar: exactly symmetric, elbows in for exactly as long as gloves are out |
+| THE SARDINE | 0.60 | 1 | the only man whose ribs come back before his chin does — downstairs is his hole |
+| THE ANVIL | 1.60 | 2 | the wall, and the point of the whole change: the body was how you skipped his lesson |
+| SILK | 1.00 | 1 | the Rooster's numbers behind `openMul` 0.80 — and you cannot SEE it, because his forearms never light |
+| THE METRONOME | 1.15 | 1 | the tightest effective low guard on the card once his 0.70 openMul is applied |
+
+**THE CUE.** While the elbows are in, `farm_L`, `farm_R` and `hatch_trunks` come up a step, with
+the forearms mixed 0.35 toward WHITE — hue alone is a weak signal at 2.6 m on an additive renderer
+(the Rooster's gloves are RED on a MAGENTA body), so the mix buys a luminance step that works for
+all five palettes. `Boxer.lowOpen` deliberately leads the rule by `TUCK_SET_T` = 0.10 world
+seconds, so the picture says THROW NOW rather than THROW A MOMENT AGO. A refused body punch says
+**ELBOWS** rather than BLOCKED, and the block sound drops to pitch 0.7.
 
 ### 4.4 Hearts — the punch budget
 Three hearts, drawn at the bottom of the plate (§8). The idiom is the NES sequel's rather than the

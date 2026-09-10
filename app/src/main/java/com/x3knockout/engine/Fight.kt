@@ -1056,6 +1056,15 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 val n = boxer.knockdownsFight.coerceAtLeast(1)
                 hisKnockdown(n, if (boxer.riseAt > 0) boxer.riseAt else Boxer.RISE_AT[(n - 1).coerceIn(0, 2)], o.ko, p.special)
             }
+        } else if (o.result == PunchResult.SHORT) {
+            // YOU THREW FROM TOO FAR OUT — the out-fighter's whole point (DESIGN.md §6.2). It
+            // costs a heart like any other punch that did not land, because the budget is what
+            // makes range matter at all, but it is NOT a whiff: no meter, no mash tax, and its
+            // own word, because "why did that do nothing" has to have an answer on the glass.
+            chain = 0
+            hearts = (hearts - 1).coerceAtLeast(0)
+            say("SHORT"); host.sfx(Sfx.WHIFF, 0.6f, 0.4f)
+            hitBy[HIT_BLOCKED]++
         } else if (o.result == PunchResult.GUARD || o.result == PunchResult.AIR) {
             chain = 0
             if (p.special) {
@@ -2031,6 +2040,12 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 damageFlash = max(damageFlash, 0.3f)
                 host.sfx(Sfx.GUARD_THUD, 1f, 0.7f)
             }
+            // HE THREW FROM TOO FAR OUT. Not a dodge and not a whiff of yours: the ring did it,
+            // and the player is told so in one word rather than being left to wonder why a punch
+            // that was clearly coming never arrived. No score, no meter, no streak — you did
+            // nothing. It is worth watching for, because the man who does it most is the one
+            // whose whole style is to be somewhere else (DESIGN.md §6.2).
+            StrikeResult.SHORT -> { word = "SHORT"; host.sfx(Sfx.WHIFF, 0.6f, 0.35f) }
         }
         multiplier = (1 + dodgeStreak / 2).coerceIn(1, MULT_MAX)
         if (word.isNotEmpty()) say(word)

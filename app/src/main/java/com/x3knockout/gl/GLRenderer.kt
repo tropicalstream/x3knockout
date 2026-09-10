@@ -33,6 +33,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -122,6 +123,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     private var refereePose: StrokeModel.Pose? = null
     private var refereeArm = -1
     private val place = StrokeModel.Place()
+    /** The ring's own placement: it belongs to THE MARK, and the man no longer does (see [buildRing]). */
+    private val ringPlace = StrokeModel.Place()
+    /** His feet in world space this frame, cached for the squash pivot (which `crestPass` also needs). */
+    private var bxW = Boxer.X; private var bzW = Boxer.Z
     private val refPlace = StrokeModel.Place()
     private val markerOut = FloatArray(3)
     private val chinW = FloatArray(3)
@@ -171,6 +176,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     private var sinkY = 0f; private var downRoll = 0f
     private var detailOn = true
     private var ringAcid = false
+    /** The count's mark, computed once at the knockdown from where he actually fell. */
+    private var countMarkX = REF_CENTRE_X; private var countMarkZ = REF_CENTRE_Z
+    private var countMarkSet = false
+    private val downSpot = FloatArray(2)
     private var refX = REF_HOME_X; private var refZ = REF_HOME_Z; private var refArm = 0f
     /** The last four `glove_*` positions on world time — the motion trails, gone when time freezes. */
     private val trailL = FloatArray(TRAIL_N * 3); private val trailR = FloatArray(TRAIL_N * 3)
@@ -423,7 +432,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // the idle sway doubles while time runs (§7.5) — eased, so the doubling is never a pop
         bobMul += ((if (c.timeScale > 0.7f) 2f else 1f) - bobMul) * (1f - exp(-dt / 0.25f))
         // looked away (§6): the fight dims to 0.5 and comes back over RESQUARE_T; never punished
-        val away = inFight && abs(f.yaw) > Boxer.LOOK_AWAY_RAD
+        // RELATIVE TO WHERE HE IS, not to dead ahead. This thresholded the RAW head yaw and so
+        // hard-assumed a bearing of zero; at Silk's ±15° of circling, looking straight AT him
+        // would have dimmed the fight to half. A bug the moment he has feet, not a preference.
+        val bearing = atan2(f.boxer.footX - camX, -(f.boxer.footZ - camZ))
+        var rel = f.yaw - bearing
+        while (rel > PI) rel -= 2f * PI.toFloat(); while (rel < -PI) rel += 2f * PI.toFloat()
+        val away = inFight && abs(rel) > Boxer.LOOK_AWAY_RAD
         fightDim += ((if (away) 0.5f else 1f) - fightDim) * (1f - exp(-dt / Boxer.RESQUARE_T))
         // the KO: the engine fades his gain 1 → 0.3 (BOXER.md §8's `ko` strip)
         koDim = if (f.state == State.KO) 1f - 0.7f * (f.stateT / Clock.SLOW_KO_T).coerceIn(0f, 1f) else 1f
@@ -519,7 +534,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     private fun buildRing() {
         ringBatch.reset()
         val c = if (ringAcid) ACID else BLUE
-        place.x = 0f; place.y = 0f; place.z = Boxer.Z; place.yaw = 0f; place.pitch = 0f; place.roll = 0f; place.scale = 1f
+        // ITS OWN PLACE, not the boxer's shared scratch. The ring is built around THE MARK and
+        // stays there; sharing `place` with a man who now walks would have dragged it with him
+        // the first time buildRing was called after boxerScene (the KO's seam flip does exactly
+        // that). Severed by construction rather than by call order.
+        ringPlace.x = 0f; ringPlace.y = 0f; ringPlace.z = Boxer.Z
+        ringPlace.yaw = 0f; ringPlace.pitch = 0f; ringPlace.roll = 0f; ringPlace.scale = 1f
+        val place = ringPlace
         if (ringModel.parts.isEmpty()) proceduralRing(c) else ringModel.walk(place, null) { x0, y0, z0, x1, y1, z1, pi ->
             val a = when (ringModel.parts[pi].name) { "grid" -> 0.18f; "apron" -> 0.4f; else -> 0.6f }
             ringBatch.v(x0, y0, z0, c[0], c[1], c[2], a); ringBatch.v(x1, y1, z1, c[0], c[1], c[2], a)
@@ -566,7 +587,12 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
 
     private fun buildScene(dt: Float) {
         // the hit-stop kick: the whole drawn scene, not the camera, 6 px away from the punch, easing back over the stop
-        kickWx = fight.kickX * 0.0045f; kickWy = fight.kickY * 0.0045f
+        // scaled by his distance: a fixed world translation calibrated at 2.6 m is up to a fifth
+        // wrong across the new range envelope, and the kick is supposed to be a screen-space kick
+        val kd = sqrt((fight.boxer.footX - camX) * (fight.boxer.footX - camX) +
+            (fight.boxer.footZ - camZ) * (fight.boxer.footZ - camZ)).coerceAtLeast(0.3f)
+        val kk = KICK_PX_M * (kd / Boxer.REST_RANGE)
+        kickWx = fight.kickX * kk; kickWy = fight.kickY * kk
         if (fight.state == State.TITLE) { boxerScene(dim = 0.55f); refereeScene(dt); return }
         boxerScene(dim = 1f)
         sampleTrails(fight.clock.wdt)
@@ -626,25 +652,38 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val frame = b.strip.frame
         val wt = fight.clock.worldT
         val gain = dim * fightDim * koDim
-        place.x = Boxer.X; place.z = Boxer.Z
+        // WHERE HE IS STANDING, which is a variable now (DESIGN.md §6.2). Everything downstream —
+        // walkFrame, emitSeg, the batches, uMVP — follows for free.
+        place.x = b.footX; place.z = b.footZ
+        bxW = b.footX; bzW = b.footZ
         // HOW HE WAITS — the channel that tells the five men apart before either of them moves.
         // The Sardine jitters, the Anvil heaves, Silk shifts his weight and shows nothing, the
         // Metronome ticks. Same 196 frames underneath all of it; four multipliers on top.
         val fr = fight.fighter
         place.y = 0.03f * fr.bobAmp * sin(wt * 2.1f * fr.bobHz) * bobMul
-        place.yaw = set.headingTo(Boxer.X, Boxer.Z, camX, camZ)
+        // HIS OWN EASED HEADING, not an instantaneous atan2. `Boxer.resquare` has computed this
+        // every frame since the first prototype and nothing has ever read it; an atan2 to a man
+        // who is himself translating snaps, and the ease is 0.15 s of REAL time so a frozen world
+        // still lets him turn to face a leaning player rather than reading as a cardboard cut-out.
+        place.yaw = b.yaw
         place.roll = 0.035f * fr.swayAmp * sin(wt * 1.3f * fr.swayHz)
         place.pitch = 0f
         place.scale = fr.stature
         ux = cos(place.yaw); uz = -sin(place.yaw)
-        val d = sqrt((Boxer.X - camX) * (Boxer.X - camX) + (Boxer.Z - camZ) * (Boxer.Z - camZ))
-        val hatchK = sqrt(2.6f / d.coerceAtLeast(0.3f))
+        val d = sqrt((place.x - camX) * (place.x - camX) + (place.z - camZ) * (place.z - camZ))
+        val hatchK = sqrt(Boxer.REST_RANGE / d.coerceAtLeast(0.3f))
+        // DISTANCE IS A GAMEPLAY FACT NOW, so it has to be a VISIBLE one: on an additive renderer
+        // with no perspective cue but size, a man at 3.2 m and a man at 2.2 m differ by 30 % of
+        // silhouette and almost nothing else. A gentle gain on top makes near read as NEAR —
+        // brighter is closer, which is the one depth cue this display has — and it is clamped
+        // narrow so it can never be mistaken for a telegraph.
+        val nearGain = (Boxer.REST_RANGE / d.coerceAtLeast(0.3f)).pow(0.35f).coerceIn(0.85f, 1.20f)
         // DETAIL LOD with hysteresis (§12.7): off beyond 3.4 m, on inside 3.0 m, so nothing flickers on a lean
         if (d > DETAIL_FAR) detailOn = false else if (d < DETAIL_NEAR) detailOn = true
-        if (!set.markerWorld(frame, mChin, place, chinW)) { chinW[0] = Boxer.X; chinW[1] = 1.2f; chinW[2] = Boxer.Z }
-        if (!set.markerWorld(frame, mCrown, place, crownW)) { crownW[0] = Boxer.X; crownW[1] = 2.1f; crownW[2] = Boxer.Z }
+        if (!set.markerWorld(frame, mChin, place, chinW)) { chinW[0] = place.x; chinW[1] = 1.2f; chinW[2] = place.z }
+        if (!set.markerWorld(frame, mCrown, place, crownW)) { crownW[0] = place.x; crownW[1] = 2.1f; crownW[2] = place.z }
 
-        tintPass(set, gain, hatchK)
+        tintPass(set, gain * nearGain, hatchK)
 
         val tint = material.tint
         // AND HOW MUCH HE SHOWS IT. A showboat rocks; a wardrobe barely notices; the champion
@@ -888,8 +927,9 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             bx = chinW[0] + u2 * ux + nx; by = chinW[1] + e2; bz = chinW[2] + u2 * uz + nz
         }
         if (sxz != 1f || sy != 1f) {
-            ax = Boxer.X + (ax - Boxer.X) * sxz; az = Boxer.Z + (az - Boxer.Z) * sxz; ay *= sy
-            bx = Boxer.X + (bx - Boxer.X) * sxz; bz = Boxer.Z + (bz - Boxer.Z) * sxz; by *= sy
+            // about HIS FEET, which move now — the constants would squash him toward the mark.
+            ax = bxW + (ax - bxW) * sxz; az = bzW + (az - bzW) * sxz; ay *= sy
+            bx = bxW + (bx - bxW) * sxz; bz = bzW + (bz - bzW) * sxz; by *= sy
         }
         ax += kickWx; ay += kickWy; bx += kickWx; by += kickWy
         segOut[0] = ax; segOut[1] = ay; segOut[2] = az; segOut[3] = bx; segOut[4] = by; segOut[5] = bz
@@ -991,8 +1031,16 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         trailAcc = 0f
         val frame = fight.boxer.strip.frame
         for (i in TRAIL_N - 1 downTo 1) for (k in 0 until 3) { trailL[i * 3 + k] = trailL[(i - 1) * 3 + k]; trailR[i * 3 + k] = trailR[(i - 1) * 3 + k] }
-        if (set.markerWorld(frame, mGloveL, place, markerOut)) { trailL[0] = markerOut[0]; trailL[1] = markerOut[1]; trailL[2] = markerOut[2] }
-        if (set.markerWorld(frame, mGloveR, place, markerOut)) { trailR[0] = markerOut[0]; trailR[1] = markerOut[1]; trailR[2] = markerOut[2] }
+        // IN HIS OWN FRAME, NOT THE WORLD'S — the one line that stops a walking boxer smearing
+        // speed lines off gloves that are not moving. TRAIL_MIN_M2 opens the gate at 0.9 m/s of
+        // marker travel and the Sardine's own feet peak at 2.5 m/s, so a world-space sample would
+        // draw a red streak every time he darted, whatever his hands were doing.
+        if (set.markerWorld(frame, mGloveL, place, markerOut)) {
+            trailL[0] = markerOut[0] - place.x; trailL[1] = markerOut[1]; trailL[2] = markerOut[2] - place.z
+        }
+        if (set.markerWorld(frame, mGloveR, place, markerOut)) {
+            trailR[0] = markerOut[0] - place.x; trailR[1] = markerOut[1]; trailR[2] = markerOut[2] - place.z
+        }
         trailN = min(TRAIL_N, trailN + 1)
     }
 
@@ -1011,7 +1059,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
                 val l2 = dx * dx + dy * dy + dz * dz
                 if (l2 < TRAIL_MIN_M2 || l2 > 1f) continue
                 wcolor(RED, 0.45f * (1f - i / (TRAIL_N - 1f)) * k)
-                wline(x0, y0, z0, x1, y1, z1)
+                // stored local, drawn at his CURRENT feet: the streak belongs to the glove
+                wline(x0 + bxW, y0, z0 + bzW, x1 + bxW, y1, z1 + bzW)
             }
         }
     }
@@ -1095,7 +1144,19 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     private fun refereeScene(dt: Float) {
         val f = fight
         val counting = f.state == State.KNOCKDOWN_COUNT
-        val tx = if (counting) REF_CENTRE_X else REF_HOME_X; val tz = if (counting) REF_CENTRE_Z else REF_HOME_Z
+        // BESIDE THE MAN ON THE CANVAS, WHEREVER HE FELL. The two REF_CENTRE constants were
+        // authored "beside the fallen man" when the fallen man was always at (0, −2.6); he can
+        // now go down most of a metre either way. The side is picked from where he lies and the
+        // mark is computed once, at the knockdown, so 92 white strokes at α 0.95 never drift
+        // across the body they are counting over.
+        if (counting && !countMarkSet) {
+            fight.boxer.downSpot(downSpot)
+            val side = if (downSpot[0] - camX >= 0f) 1f else -1f
+            countMarkX = (downSpot[0] + side * (REF_CENTRE_X - Boxer.X)).coerceIn(-2.2f, 2.2f)
+            countMarkZ = (downSpot[1] - 0.55f).coerceIn(-4.4f, -1.6f)
+            countMarkSet = true
+        } else if (!counting) countMarkSet = false
+        val tx = if (counting) countMarkX else REF_HOME_X; val tz = if (counting) countMarkZ else REF_HOME_Z
         val k = 1f - exp(-dt / 0.2f)
         refX += (tx - refX) * k; refZ += (tz - refZ) * k
         val armTarget = if (counting) (if (f.countN % 2 == 1) 2.6f else 0.25f) else 0f
@@ -1410,8 +1471,15 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         const val HATCH_SKIN = 0.20f
         const val HATCH_BLOCK = 0.30f
         /** DETAIL parts' LOD hysteresis (§12.7): off beyond 3.4 m, on inside 3.0 m. */
-        const val DETAIL_FAR = 3.4f
-        const val DETAIL_NEAR = 3.0f
+        /**
+         * DETAIL parts' LOD hysteresis (§12.7). It was 3.4 / 3.0 and was DEAD CODE: with the man
+         * nailed to 2.6 m the greatest distance the eye could reach was 2.82 m, so the branch
+         * never once fired. His range now runs to 3.30, so the thresholds move above it — the LOD
+         * gates the pupils and the mouth, which are the TELL, and it must never fire on a man the
+         * player is trying to read.
+         */
+        const val DETAIL_FAR = 4.0f
+        const val DETAIL_NEAR = 3.6f
         /** The telegraph flash ramps in over 30 ms real; the impact whites hold two frames (§2.5, §7.4). */
         const val FLASH_RAMP_T = 0.03f
         const val FLASH_FRAMES = 2
@@ -1455,6 +1523,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         /** The posture dial's home on the plate (see [postureDial]). */
         const val DIAL_X = 110f
         const val DIAL_Y = 300f
+        /** The hit-stop kick, world metres per plate pixel at [Boxer.REST_RANGE]; scaled by his distance. */
+        const val KICK_PX_M = 0.0045f
         /** A trail segment shorter than this (3 cm) is the idle sway, not a punch, and is not a speed line. */
         const val TRAIL_MIN_M2 = 0.0009f
 
