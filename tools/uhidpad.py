@@ -96,6 +96,22 @@ def main():
         down(L); delay(300); down(R); delay(40); up(L); delay(100); up(R); delay(1500) # ... L lifting while R is down
         down(L); down(R); delay(50); up(L); up(R); delay(1500)                         # the same millisecond
         delay(300)
+    elif what == "career":
+        # THE CAREER, FROM THE DESK: a coin, then ninety seconds of alternating taps. With
+        # `--ei hp 6` the man in the ring goes down on the punches that land while he is mid-tell,
+        # which is enough to walk a bout to its knockout and put the RISE card on the glass —
+        # the one screen that cannot be reached by launching into it.
+        delay(2500)
+        tap(R); delay(9000)                     # the coin, the ceremony, the round card
+        for i in range(120):
+            tap(L if i % 2 == 0 else R); delay(700)
+        delay(1000)
+    elif what == "spam":
+        # Taps only, no coin: for a fight already in progress that needs finishing from the desk.
+        delay(2000)
+        for i in range(200):
+            tap(L if i % 2 == 0 else R); delay(450)
+        delay(500)
     elif what == "title":
         delay(2500)
         tap(L); delay(1500)

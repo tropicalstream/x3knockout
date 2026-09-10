@@ -589,6 +589,125 @@
    "section": "6.5 THE MAN IN THE RING"
   },
   {
+   "id": "intro_you",
+   "speaker": "ANNOUNCER",
+   "text": "And in this corner. Out of Washington, D.C. Kid Columbia!",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "title_shot",
+   "speaker": "ANNOUNCER",
+   "text": "And now. For the championship of the world!",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "rank_4",
+   "speaker": "ANNOUNCER",
+   "text": "Ranked. Number four in the world.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "rank_3",
+   "speaker": "ANNOUNCER",
+   "text": "Number three in the world.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "rank_2",
+   "speaker": "ANNOUNCER",
+   "text": "Number two in the world.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "rank_1",
+   "speaker": "ANNOUNCER",
+   "text": "The number one contender!",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "corner_1",
+   "speaker": "CORNER",
+   "text": "Everybody starts here. He struts. Take the strut off him.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "corner_2",
+   "speaker": "CORNER",
+   "text": "He throws in bunches. Let him empty out. Then answer.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "corner_3",
+   "speaker": "CORNER",
+   "text": "Don't swing at Duke Odell. Make him swing at you.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "corner_4",
+   "speaker": "CORNER",
+   "text": "Nothing shows on this one. Watch his feet, not his face.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "corner_5",
+   "speaker": "CORNER",
+   "text": "Twelve years he's kept the time. Take the beat off him.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "climb_1",
+   "speaker": "CORNER",
+   "text": "One down. Nobody knows your name yet. Keep going.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "climb_2",
+   "speaker": "CORNER",
+   "text": "They're saying it now. Say it back with your hands.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "climb_3",
+   "speaker": "CORNER",
+   "text": "You just walked through a wall. Don't stop to look.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "climb_4",
+   "speaker": "CORNER",
+   "text": "One more, kid. One more and you're not the kid.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "climb_5",
+   "speaker": "CORNER",
+   "text": "Look at you. Out of the District. Champion of the world.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
+   "id": "not_beaten",
+   "speaker": "CORNER",
+   "text": "You're not beaten. You're on the floor. Different things.",
+   "recycled": false,
+   "section": "6.6 THE RISE — the career (2026-09-10)"
+  },
+  {
    "id": "intro_1",
    "speaker": "ANNOUNCER",
    "text": "Ladies and gentlemen.",
@@ -675,7 +794,7 @@
  ],
  "by_speaker": {
   "ANNOUNCER": {
-   "total": 24,
+   "total": 30,
    "recycled": 0
   },
   "REFEREE": {
@@ -683,7 +802,7 @@
    "recycled": 0
   },
   "CORNER": {
-   "total": 16,
+   "total": 27,
    "recycled": 0
   },
   "CROWD": {

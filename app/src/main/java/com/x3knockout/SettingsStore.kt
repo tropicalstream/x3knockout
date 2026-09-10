@@ -168,10 +168,28 @@ class SettingsStore(context: Context) {
     @Volatile var drill = 0
 
     // ------------------------------------------------------------------ the champion (separate file)
-    /** Won by knockout at least once: `YOU` becomes `CHAMPION` on the plate (DESIGN.md §8). */
+    /**
+     * THE BELT — beat the man at the top of the card, and `KID COLUMBIA` becomes `CHAMPION` on the
+     * plate (VOICE.md 6.6).
+     *
+     * It used to mean "won by knockout at least once", which made a win over a club fighter in the
+     * first bout rename the player champion of the world for the life of the install. [heal] is the
+     * one-time correction for a device that was told that.
+     */
     var champion: Boolean
         get() = story.getBoolean("champion", false)
         set(v) { if (recordsEnabled && v) story.edit().putBoolean("champion", true).apply() }
+
+    /**
+     * A ONE-TIME REPAIR OF A FLAG THAT USED TO MEAN SOMETHING ELSE. Called once from `Fight.boot`.
+     * A stored `champion` written under the old rule cannot be told apart from an earned one, so
+     * every device that has one loses it and has to beat the card; that is the honest way round,
+     * because the alternative is a title nobody in this build ever won.
+     */
+    fun healStory(version: Int) {
+        if (story.getInt("storyV", 0) >= version) return
+        story.edit().putBoolean("champion", false).putInt("storyV", version).apply()
+    }
 
     /** Settings only. Records are kept; the champion flag is in another file entirely and untouched. */
     fun resetSettings() {

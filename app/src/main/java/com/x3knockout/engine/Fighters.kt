@@ -114,6 +114,22 @@ class Fighter(
      * the wrong fight. Three words each, and each says how that round is going to go.
      */
     val roundNames: Array<String> = arrayOf("ROUND ONE", "ROUND TWO", "THE LAST ROUND"),
+
+    // ------------------------------------------------------------------ WHERE HE SITS ON THE LADDER
+    /**
+     * HIS WORLD RANKING — 4, 3, 2, 1, and 0 for the man holding the belt.
+     *
+     * The card was a list before it was a ladder. It is a ladder now (VOICE.md 6.6): the player is
+     * KID COLUMBIA out of Washington D.C., unranked, and beating a man TAKES HIS NUMBER. That one
+     * field turns five separate bouts into a career the announcer can read out loud, and it is why
+     * the order of [CARD] is now load-bearing rather than merely increasing in difficulty.
+     */
+    val rank: Int,
+    /**
+     * The line under his billing on the bout card — what beating him would MEAN, said in the
+     * second person and in one breath. Not his biography: the player's stake in him.
+     */
+    val story: String,
 ) {
     // The card's hardness is folded in HERE, once, so every reader of these three sees the tuned
     // value and no call site can forget to apply it. The authored numbers stay readable above.
@@ -406,6 +422,7 @@ class Fighter(
         /** #1 — the grammar. Unchanged: every number is the one the owner has already played. */
         val ROOSTER = Fighter(
             id = "rooster", name = "THE ROOSTER", billing = "ROY RUDD - THE STRUTTING CHAMPION OF NOWHERE",
+            rank = 4, story = "WIN AND YOU ARE RANKED. LOSE AND YOU GO HOME UNKNOWN.",
             asset = "boxer", hp = intArrayOf(100, 120, 140),
             roundNames = arrayOf("THE STRUT", "THE RUFFLE", "THE COCKFIGHT"),
             patterns = emptyList(),          // he keeps Boxer's own PATTERN_R1..R3
@@ -414,6 +431,7 @@ class Fighter(
 
         val SARDINE = Fighter(
             id = "sardine", name = "THE SARDINE", billing = "SAL MARINO - NEVER THROWS JUST ONE",
+            rank = 3, story = "THEY SAY YOU GOT LUCKY ONCE. SAL THROWS UNTIL THEY BELIEVE IT.",
             asset = "boxer_sardine", hp = intArrayOf(110, 130, 150),
             tellMul = 0.78f, strikeMul = 0.92f, recoverMul = 0.85f, dmgMul = 0.7f,
             hangMul = 0.85f, openMul = 0.85f, feintsFromRound = 2,
@@ -427,6 +445,7 @@ class Fighter(
 
         val ANVIL = Fighter(
             id = "anvil", name = "THE ANVIL", billing = "DUKE ODELL - HE WAITS FOR YOU TO SWING",
+            rank = 2, story = "NOBODY GOES THROUGH DUKE ODELL. THEY GO AROUND HIM.",
             asset = "boxer_anvil", hp = intArrayOf(150, 180, 210),
             tellMul = 1.25f, strikeMul = 1.0f, recoverMul = 1.15f, dmgMul = 1.7f,
             hangMul = 1.1f, openMul = 1.0f, feintsFromRound = 2,
@@ -440,6 +459,7 @@ class Fighter(
 
         val SILK = Fighter(
             id = "silk", name = "SILK", billing = "SORENSEN - NOTHING SHOWS ON HIM",
+            rank = 1, story = "ONE MAN BETWEEN YOU AND THE TITLE. NOTHING SHOWS ON HIM.",
             asset = "boxer_silk", hp = intArrayOf(120, 145, 170),
             tellMul = 0.88f, strikeMul = 0.95f, recoverMul = 0.9f, dmgMul = 1.1f,
             hangMul = 0.9f, openMul = 0.8f, feintsFromRound = 1,
@@ -453,6 +473,7 @@ class Fighter(
 
         val METRONOME = Fighter(
             id = "metronome", name = "THE METRONOME", billing = "MAX VOSS - HE KEEPS YOUR TIME",
+            rank = 0, story = "TWELVE YEARS. NOBODY HAS TAKEN A ROUND OFF HIM.",
             asset = "boxer_metronome", hp = intArrayOf(140, 170, 200),
             tellMul = 1.0f, strikeMul = 1.0f, recoverMul = 0.85f, dmgMul = 1.4f,
             hangMul = 1.0f, openMul = 0.7f, feintsFromRound = 3,

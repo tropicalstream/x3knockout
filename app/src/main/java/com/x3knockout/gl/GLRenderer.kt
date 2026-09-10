@@ -1116,6 +1116,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             f.state == State.KNOCKDOWN_COUNT -> Hud.Phase.COUNT
             f.state == State.ROUND_END -> Hud.Phase.CORNER
             f.state == State.KO -> Hud.Phase.KO
+            f.state == State.RISE -> Hud.Phase.RISE
             else -> Hud.Phase.GAME_OVER
         }
         m.phaseT = f.stateT; m.t = f.t
@@ -1133,7 +1134,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         m.hisName = fight.fighter.name
         m.introName = fight.fighter.name; m.introBilling = fight.fighter.billing
         m.hisHp = hisHpShown; m.hisKd = b.knockdownsRound
-        m.yourName = if (store.champion) "CHAMPION" else "YOU"
+        m.yourName = fight.yourNamePlate
+        m.riseHead = fight.riseHead; m.riseLine = fight.riseLine; m.riseNext = fight.riseNext
+        m.riseChampion = fight.riseChampion
+        m.introRank = Fight.rankWord(fight.fighter.rank)
+        m.introStory = fight.fighter.story
         m.yourHp = f.hp / Fight.HP_MAX.toFloat(); m.yourKd = f.knockdownsYouRound
         m.roundClock = f.clockText(f.roundClock); m.roundLine = "ROUND ${f.round} OF ${Fight.ROUNDS}"; m.realLine = "REAL " + f.clockText(f.fightRealT)
         m.clockPulse = f.state == State.FIGHT && f.roundClock <= Fight.CLAPPER_FROM_S

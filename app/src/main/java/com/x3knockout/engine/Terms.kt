@@ -101,10 +101,24 @@ object Lines {
     const val KNOCKDOWN = "knockdown"
     const val SLEEP = "sleep"
     const val WINNER_KO = "winner_ko"
+    const val WINNER_TKO = "winner_tko"
+    const val WINNER_BELT = "winner_belt"
     const val NO_DECISION = "no_decision"
     const val END_OF_LINE = "end_of_line"
+    // THE CAREER (VOICE.md 6.6): the announcer carries the STAKES — the city, the number, the title.
+    const val INTRO_YOU = "intro_you"
+    const val TITLE_SHOT = "title_shot"
+    /** `rank_4` … `rank_1`: the number the player has just taken off the man he beat. */
+    fun rank(n: Int) = "rank_" + n.coerceIn(1, 4)
     // REFEREE
     const val FIGHT = "fight"
+    // THE REFEREE'S OTHER MOMENTS (VOICE.md 5.5). All five clips have been rendered since the
+    // first pass and none of them was ever named here, so the only thing the third man in the ring
+    // ever said was "Box!" and the count. He has a body now; he gets his voice with it.
+    const val REF_BREAK = "ref_break"
+    const val REF_TIME = "ref_time"
+    const val REF_STOP = "ref_stop"
+    const val REF_NEUTRAL = "ref_neutral"
     /** `ref_1` … `ref_10`. */
     fun ref(n: Int) = "ref_" + n.coerceIn(1, 10)
     // CORNER
@@ -119,6 +133,13 @@ object Lines {
     const val TIP_STILL = "tip_still"
     const val TIP_STEP = "tip_step"
     const val TIP_SPECIAL = "tip_special"
+    // THE CAREER (VOICE.md 6.6): the trainer carries everything that is about the PLAYER rather
+    // than about the fight — he is the only person in the building who is on his side.
+    /** `corner_1` … `corner_5`: what he tells you on the bout card, one per man. */
+    fun corner(bout: Int) = "corner_" + (bout + 1).coerceIn(1, 5)
+    /** `climb_1` … `climb_5`: what he tells you on the rise card, after you have taken a ranking. */
+    fun climb(bout: Int) = "climb_" + (bout + 1).coerceIn(1, 5)
+    const val NOT_BEATEN = "not_beaten"
     // CROWD
     const val CHANT = "chant"
     const val OH = "oh"

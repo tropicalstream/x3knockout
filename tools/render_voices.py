@@ -1,77 +1,83 @@
 #!/usr/bin/env python3
-"""Render every voice line in tools/lines.json, each speaker through its own chain.
+"""Render every voice line in tools/lines.json, each speaker through its own voice and chain.
 
     tools/render_voices.py [--only SPEAKER[,SPEAKER]] [--force] [--dry-run] [--list] [--prune]
 
-Six speakers, one renderer, because the thing that must not drift is the SEPARATION between them:
-they are mixed together on one bus and the player has to know instantly who is talking. The chains
-are the characterisation, so they live here beside each other where a change to one can be heard
-against the others, rather than in six scripts nobody diffs.
+SEVEN VOICES, ONE RENDERER, because the thing that must not drift is the SEPARATION between them.
+They are mixed on one bus and the player has to know instantly who is talking, so the casting and
+the chains live here beside each other where a change to one can be heard against the others.
 
-    SYSTEM     macOS Zarvox → ring-mod / echo / bit-crush     the Protocol: a machine reading policy
-    ANNOUNCER  macOS Zarvox slower → stadium band-pass + long echo, NO crusher   the institution
-    CROWD      six Zarvox renders detuned ±40 cents, offset 30–90 ms, summed     the gallery
-    PILOT      fish.audio (free tier header) → loudnorm −17                      the only living voice
-    BUILD      the PILOT's own render → pitch −3 st, 17 Hz tremolo, chorus, crush the pilot made flat
-    STRAY      a clean macOS voice, NO chain at all                              not owned by anything
-    USER       a clean human voice unlike any other here → the beam chain              a person outside
+    ANNOUNCER  fish.audio, one model, in a big room   the showman on the house PA
+    REFEREE    fish.audio, one model, one short slap  in the ring with you, no microphone
+    CORNER     macOS Grandpa, close, no room at all   the old trainer at your ear
+    BOXER      fish.audio, FIVE DIFFERENT MODELS      five men, five actual voices
+    CROWD      six macOS voices detuned and summed    a crowd is many people, not one voice
 
-Recycled ids (♻ in STORY.md) are COPIED from X3Paranoids rather than re-rendered, so the suite's
-continuity is a file copy and not an impersonation.
+THE CASTING IS THE OWNER'S, BY URL (2026-09-10). The first cast was macOS's 1980s formant synths
+and he was right about why that failed -- "this is an emotional sport not a reobot competition".
+The second was one fish model pitch-shifted five ways, which is a costume, not a cast: a flyweight
+and a heavyweight are not the same performance at different speeds. Now the announcer, the referee
+and each of the five men are separate fish.audio models chosen by the owner, and THE PITCH SHIFTS
+ARE GONE -- shifting a cast voice would undo the casting.
 
---prune deletes clips on disk that the script no longer names. A clip nobody can reach is worse
-than a missing one: it ships, it is credited, and it silently proves nothing was checked.
+The corner is still macOS Grandpa, because no model was named for him. He is the one voice that is
+never in the room with the crowd (he is 30 cm from your ear, dry, no reverb at all), which is what
+keeps him legible next to five human voices.
 
-Writes assets/voice/<id>.m4a (SYSTEM, ANNOUNCER, CROWD), assets/voice_hero/<id>.mp3 (PILOT, BUILD),
-assets/voice_stray/<id>.m4a (STRAY), plus a manifest.json of clip durations in ms per directory —
-the attract sequence and every `after()` beat are timed off those numbers, never off a stopwatch.
+Writes assets/voice/<id>.m4a (ANNOUNCER, REFEREE, CORNER, CROWD), assets/voice_hero/<id>.mp3
+(BOXER), plus a manifest.json of clip durations in ms per directory -- the introduction sequence
+and every after() beat are timed off those numbers, never off a stopwatch.
 """
-import json, os, subprocess, sys, urllib.request, urllib.error
+import json, os, subprocess, sys, time, urllib.request, urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINES = os.path.join(ROOT, "tools", "lines.json")
 CONFIG = os.path.join(ROOT, "tools", "fish.config")
 BASE = os.path.join(ROOT, "app/src/main/assets")
-PARANOIDS = os.path.expanduser("~/Projects/X3Paranoids/app/src/main/assets")  # unused here
 API = "https://api.fish.audio/v1/tts"
 FREE_MODEL = "s2.1-pro-free"
 
-# THE FIVE VOICES OF A BOXING CABINET.
+# ---------------------------------------------------------------- THE CAST (see the module note)
 #
-# THE FIRST CAST WAS WRONG AND THE OWNER WAS RIGHT ABOUT WHY: Ralph, Fred and Reed are the 1980s
-# FORMANT SYNTHS that ship with macOS for nostalgia. They are robots. Boxing is the most emotional
-# sport there is -- a man in a corner shouting at you, a crowd that wants blood, a referee counting
-# over someone's body -- and none of that survives being read by a speak-and-spell.
+# WHY EACH CHAIN IS WHAT IT IS. These are real recorded voices now, so the chain's whole job is
+# WHERE THE VOICE IS STANDING, and nothing else. Band-limiting and heavy compression is what made
+# the first cast sound like machinery; none of that is here.
 #
-# So: real voices, and much LIGHTER processing. The heavy chains were the other half of the
-# problem; band-limiting a voice to a 300-3000 Hz carrier and drowning it in echo makes anything
-# sound like a machine. What is left is the minimum each position actually needs -- a big room for
-# the man on the PA, one short slap for the man standing in the ring, nothing at all for the man
-# with his mouth at your ear.
-#
-#   ANNOUNCER  Rocko, unhurried, in a big room       the showman on the house PA
-#   REFEREE    Daniel, fast and clipped, one slap    in the ring with you, no microphone
-#   CORNER     Grandpa, close, no room at all        an old trainer thirty centimetres from your ear
-#   BOXER      fish.audio -- a real human voice      the man in front of you, and the one that has
-#                                                    to carry contempt, so it is not synthesised at
-#                                                    all; each fighter is the same performance
-#                                                    pitch-shifted, so the Sardine is small and the
-#                                                    Anvil is enormous
-#   CROWD      six DIFFERENT voices summed           a crowd is many people; six copies of one
-#                                                    voice is a chorus, which is what it sounded like
+#   the announcer is on a PA in a hall        -> a long double echo, gentle compression
+#   the referee is three feet away, shouting  -> one short slap off the canvas, firmer compression
+#   the corner is at your ear                 -> no room at all, just level
+#   the man in the ring is at arm's length    -> the shortest slap there is
 ANNOUNCER_CHAIN = ("aecho=0.85:0.5:150|260:0.28|0.16,acompressor=threshold=-18dB:ratio=2.5,"
                    "loudnorm=I=-16:TP=-1.5")
 REFEREE_CHAIN = ("aecho=0.95:0.2:38:0.14,acompressor=threshold=-16dB:ratio=3,loudnorm=I=-15:TP=-1.5")
 CORNER_CHAIN = ("acompressor=threshold=-18dB:ratio=3:attack=4,loudnorm=I=-15:TP=-1.5")
 BOXER_CHAIN = ("aecho=0.96:0.15:16:0.09,loudnorm=I=-16:TP=-1.5")
-VOICES = {"ANNOUNCER": ("Rocko", 158), "REFEREE": ("Daniel", 192), "CORNER": ("Grandpa", 176)}
 CHAINS = {"ANNOUNCER": ANNOUNCER_CHAIN, "REFEREE": REFEREE_CHAIN, "CORNER": CORNER_CHAIN,
           "BOXER": BOXER_CHAIN}
+
+# The fish.audio models the owner chose, by reference id. A speaker in here is rendered by fish;
+# anything else falls through to macOS `say` with the voice named in VOICES.
+FISH_VOICE = {
+    "ANNOUNCER": "ac192aa6102d4d669e1af4e4351cf89d",
+    "REFEREE": "1443bdae8a9546d6bb451cc4816cfdfd",
+}
+# THE FIVE MEN, five models, in card order. The id suffix on a clip picks the man: `that_all_anvil`
+# is Duke Odell's own voice, and a BOXER clip with no suffix is the fallback the engine reaches for
+# when a man has no line of his own, so it is rendered in the first man's voice and never anyone
+# else's (VOICE.md section 4: a missing crow is a silent fairness bug, not silence).
+BOXER_VOICE = {
+    "rooster": "1bf2dee1ca2848b5bc0580a4d9301341",
+    "sardine": "97050f3ee6dd49f8b2b58de51ed21269",
+    "anvil": "44db4aafb5ff45a7b268beaeead5dec7",
+    "silk": "a5f60dc6887548c2bec5190c95d26dee",
+    "metronome": "40943e1f497c4256b23d7bc29b0e26f6",
+}
+FALLBACK_BOXER = "rooster"
+# The announcer names the men too, so an `intro_anvil` is the ANNOUNCER's model, not the Anvil's.
+# That is why the fighter suffix is only ever read for the BOXER speaker.
+VOICES = {"CORNER": ("Grandpa", 176)}
 # A crowd is MANY PEOPLE. Six different voices at slightly different rates, detuned and offset.
 CROWD_VOICES = [("Eddy", 150), ("Sandy", 146), ("Junior", 156), ("Shelley", 144), ("Flo", 152), ("Karen", 148)]
-# THE FIVE MEN, one performance. The fish model is the owner's; a semitone shift is what makes the
-# Sardine a flyweight and the Anvil a heavyweight without five recording sessions.
-BOXER_SHIFT = {"rooster": 2.0, "sardine": 4.5, "anvil": -4.5, "silk": 0.0, "metronome": -2.0}
 SPEAKER_DIR = {"ANNOUNCER": "voice", "REFEREE": "voice", "CORNER": "voice", "CROWD": "voice",
                "BOXER": "voice_hero"}
 SPEAKER_EXT = {"voice": "m4a", "voice_hero": "mp3"}
@@ -93,23 +99,47 @@ def render_say(sp, text, out, tmp, lid):
     sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", CHAINS[sp],
        "-ac", "1", "-ar", "24000", "-c:a", "aac", "-b:a", "64k", out)
 
-def render_boxer(text, out, tmp, lid, cfg):
-    """The one voice that is not synthesised. Pitch-shifted per fighter (the id's suffix picks it)."""
-    semis = 0.0
-    for k, v in BOXER_SHIFT.items():
-        if lid.endswith("_" + k): semis = v
-    body = json.dumps({"text": text, "reference_id": cfg["HERO_VOICE_MODEL_ID"],
+def fish_id(sp, lid):
+    """Which fish model says this line: the speaker's, or -- for a BOXER -- the man's."""
+    if sp != "BOXER":
+        return FISH_VOICE[sp]
+    for k, v in BOXER_VOICE.items():
+        if lid == k or lid.endswith("_" + k):
+            return v
+    return BOXER_VOICE[FALLBACK_BOXER]
+
+def fish_tts(text, reference_id, cfg, raw, tries=4):
+    """One call to fish.audio, retried on a transient failure — a 100-clip run must not die on one."""
+    body = json.dumps({"text": text, "reference_id": reference_id,
                        "format": "mp3", "mp3_bitrate": 128}).encode()
-    req = urllib.request.Request(API, data=body, headers={
-        "Authorization": "Bearer " + cfg["FISH_API_KEY"], "Content-Type": "application/json",
-        "model": os.environ.get("FISH_MODEL", FREE_MODEL)})
+    last = None
+    for n in range(tries):
+        req = urllib.request.Request(API, data=body, headers={
+            "Authorization": "Bearer " + cfg["FISH_API_KEY"], "Content-Type": "application/json",
+            "model": os.environ.get("FISH_MODEL", FREE_MODEL)})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = r.read()
+            if len(data) < 512:
+                raise RuntimeError(f"{len(data)} bytes back — that is not audio")
+            open(raw, "wb").write(data)
+            return
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code} {e.read()[:160]!r}"
+            if e.code not in (408, 429, 500, 502, 503, 504):
+                raise RuntimeError(last)
+        except Exception as e:                       # timeouts, resets, short reads
+            last = str(e)[:160]
+        time.sleep(1.5 * (n + 1))
+    raise RuntimeError(f"fish.audio failed {tries}x: {last}")
+
+def render_fish(sp, text, out, tmp, lid, cfg):
+    """The three cast speakers. Output stays mp3 for the hero track, m4a for the system track."""
     raw = os.path.join(tmp, lid + "_raw.mp3")
-    with urllib.request.urlopen(req, timeout=120) as r:
-        open(raw, "wb").write(r.read())
-    r = 2 ** (semis / 12.0)
-    shift = "" if abs(semis) < 0.01 else f"asetrate=44100*{r:.6f},aresample=44100,atempo={1/r:.6f},"
-    sh("ffmpeg", "-y", "-v", "error", "-i", raw, "-af", shift + BOXER_CHAIN,
-       "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "64k", out)
+    fish_tts(text, fish_id(sp, lid), cfg, raw)
+    codec = ["-c:a", "libmp3lame"] if SPEAKER_DIR[sp] == "voice_hero" else ["-c:a", "aac"]
+    sh("ffmpeg", "-y", "-v", "error", "-i", raw, "-af", CHAINS[sp],
+       "-ac", "1", "-ar", "24000", *codec, "-b:a", "64k", out)
 
 def render_crowd(text, out, tmp, lid, voices=6):
     """One word, six times, detuned and offset — a crowd is not a voice, it is a spread."""
@@ -131,16 +161,6 @@ def render_crowd(text, out, tmp, lid, voices=6):
              "-ac", "1", "-ar", "22050", "-c:a", "aac", "-b:a", "56k", out]
     sh(*args)
 
-def render_stray(text, out, tmp, lid):
-    aiff = os.path.join(tmp, lid + ".aiff"); say(text, STRAY_VOICE, STRAY_RATE, aiff)
-    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", "loudnorm=I=-18:TP=-1.5",
-       "-ac", "1", "-ar", "24000", "-c:a", "aac", "-b:a", "64k", out)
-
-def render_user(text, out, tmp, lid):
-    aiff = os.path.join(tmp, lid + ".aiff"); say(text, USER_VOICE, USER_RATE, aiff)
-    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", USER_CHAIN,
-       "-ac", "1", "-ar", "24000", "-c:a", "aac", "-b:a", "64k", out)
-
 def fish_config():
     cfg = {}
     if os.path.exists(CONFIG):
@@ -149,19 +169,6 @@ def fish_config():
             if "=" in l and not l.startswith("#"):
                 k, v = l.split("=", 1); cfg[k.strip()] = v.strip()
     return cfg
-
-def render_pilot(text, out, tmp, lid, cfg, build=False):
-    body = json.dumps({"text": text, "reference_id": cfg["HERO_VOICE_MODEL_ID"],
-                       "format": "mp3", "mp3_bitrate": 128}).encode()
-    req = urllib.request.Request(API, data=body, headers={
-        "Authorization": "Bearer " + cfg["FISH_API_KEY"], "Content-Type": "application/json",
-        "model": os.environ.get("FISH_MODEL", FREE_MODEL)})
-    raw = os.path.join(tmp, lid + "_raw.mp3")
-    with urllib.request.urlopen(req, timeout=120) as r:
-        open(raw, "wb").write(r.read())
-    chain = (BUILD_CHAIN + ",loudnorm=I=-17:TP=-1.5") if build else "loudnorm=I=-17:TP=-1.5"
-    sh("ffmpeg", "-y", "-v", "error", "-i", raw, "-af", chain,
-       "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "64k", out)
 
 def main():
     args = sys.argv[1:]
@@ -175,7 +182,7 @@ def main():
     if listing:
         for l in lines: print(f"{l['speaker']:9s} {l['id']:24s} {l['text']}")
         return 0
-    tmp = os.path.join("/tmp", "x3discs_voice"); os.makedirs(tmp, exist_ok=True)
+    tmp = os.path.join("/tmp", "x3knockout_voice"); os.makedirs(tmp, exist_ok=True)
     cfg = fish_config()
     done = {"rendered": 0, "recycled": 0, "skipped": 0, "failed": []}
     for d in set(SPEAKER_DIR.values()): os.makedirs(os.path.join(BASE, d), exist_ok=True)
@@ -185,19 +192,11 @@ def main():
         out = os.path.join(BASE, d, f"{lid}.{ext}")
         if os.path.exists(out) and not force:
             done["skipped"] += 1; continue
-        if l["recycled"]:
-            src = os.path.join(PARANOIDS, d, f"{lid}.{ext}")
-            if os.path.exists(src):
-                if not dry: sh("cp", src, out)
-                done["recycled"] += 1
-                print(f"  recycle {sp:9s} {lid}")
-                continue
-            print(f"  (no source for recycled {lid}; rendering)")
         if dry:
             print(f"  would render {sp:9s} {lid}: {text[:60]}"); continue
         try:
             if sp == "CROWD": render_crowd(text, out, tmp, lid)
-            elif sp == "BOXER": render_boxer(text, out, tmp, lid, cfg)
+            elif sp in FISH_VOICE or sp == "BOXER": render_fish(sp, text, out, tmp, lid, cfg)
             else: render_say(sp, text, out, tmp, lid)
             done["rendered"] += 1
             print(f"  {sp:9s} {lid:24s} {dur_ms(out):5d} ms  {text[:48]}")

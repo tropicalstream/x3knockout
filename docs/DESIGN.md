@@ -151,6 +151,68 @@ untouched even for him.
 
 ---
 
+## 0.2 THE CAREER — a rise, not a card (the owner, 2026-09-10)
+
+> *"the game plot should be the player is a new boxer from washington dc going up in rank to try
+> to defeat the champion, the next boxer should automatically come next. make it an inspirational
+> dramatic rise to the top rocky story."*
+
+**THE PLAYER IS KID COLUMBIA, OUT OF WASHINGTON, D.C.** — unranked, unknown, and five fights from
+the belt. He was `YOU` on the right of the scoreboard, and the anonymity was defensible as cabinet
+behaviour right up until the owner asked for a story, because a story needs somebody it is
+happening to. `Fight.YOU_NAME` is the one constant that says who; nothing else in the engine knows
+his name.
+
+**THE CARD IS A LADDER AND THE LADDER IS NOW SAID OUT LOUD.** `Fighter.rank` is 4 · 3 · 2 · 1 · 0
+down the card, 0 being the man holding the title, and beating a man TAKES HIS NUMBER. Every one of
+those numbers already existed as an ordering; what is new is that the announcer says it, the bout
+card prints it, and the trainer has a sentence about it.
+
+| | rank | he is | the stake (`Fighter.story`, printed on the bout card) |
+|---|---|---|---|
+| 1 | 4 | THE ROOSTER | WIN AND YOU ARE RANKED. LOSE AND YOU GO HOME UNKNOWN. |
+| 2 | 3 | THE SARDINE | THEY SAY YOU GOT LUCKY ONCE. SAL THROWS UNTIL THEY BELIEVE IT. |
+| 3 | 2 | THE ANVIL | NOBODY GOES THROUGH DUKE ODELL. THEY GO AROUND HIM. |
+| 4 | 1 | SILK | ONE MAN BETWEEN YOU AND THE TITLE. NOTHING SHOWS ON HIM. |
+| 5 | 0 | THE METRONOME | TWELVE YEARS. NOBODY HAS TAKEN A ROUND OFF HIM. |
+
+### 0.2.1 The one new state: `RISE`
+
+A knockout used to end the evening. `State.KO` had **no timer at all** and exactly one exit — a
+tap, to the attract screen — so winning cost the player another coin and the card's own story
+never played twice in a row. The fix is one state and no new screens beyond its plate:
+
+```
+FIGHT --KO--> KO --6.0 s, by itself--> RISE --4.5..15 s, by itself--> INTRO (the next man)
+                                        \--- the belt ---------------> TITLE
+```
+
+Nothing on the rise card asks for input and nothing on it accepts a coin; a tap only hurries it.
+That is the whole feeling: **the next man is walking out whether the player is ready or not.**
+
+### 0.2.2 Three defects the career exposed, all fixed here
+
+1. **The promotion fired inside `knockout()`**, so `fight.fighter` was already the NEXT man while
+   the last one was still on the canvas — his name was on the scoreboard over another man's body,
+   and `GLRenderer`'s strip hot-swap re-skinned the corpse a frame later. It fires in `promote()`
+   now, on the way OUT of the rise card, which fixes the name, the billing and the sprite at once
+   and moves the strip load onto a card instead of a body.
+2. **`store.champion` was set by any knockout at all**, so one win over a club fighter renamed the
+   player CHAMPION for the life of the install. It is the last man only now, and
+   `SettingsStore.healStory` clears the flag once on devices that were told otherwise.
+3. **`newFight()` zeroes `score`**, which is right for a scoreboard and wrong for a career: four
+   of five knockouts went unrecorded. `Fight.careerScore` survives a bout and is reset by a coin.
+
+### 0.2.3 Who says what
+
+The announcer is the institution, so he carries the STAKES: the city, the number, the title. The
+trainer is the only person in the building on the player's side, so he carries everything about
+the PLAYER: five lines before the bouts (`corner_1..5`), five after them (`climb_1..5`), and one
+for the floor (`not_beaten`). Nobody makes a speech; the longest line in the arc is nine words.
+The full script is `docs/VOICE.md` §6.6, and `CareerTest` is the proof that the machine plays it.
+
+---
+
 ## 1. THE VERBS
 
 ### 1.1 The founding observation

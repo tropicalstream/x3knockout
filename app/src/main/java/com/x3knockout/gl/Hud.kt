@@ -136,6 +136,14 @@ class Hud(private val out: Sink) {
         val P_INTRO_1 = floatArrayOf(320f, 175f); const val SC_INTRO_1 = 4.0f
         val P_INTRO_2 = floatArrayOf(320f, 215f); const val SC_INTRO_2 = 2.0f
         val P_INTRO_3 = floatArrayOf(320f, 245f); const val SC_INTRO_3 = 1.6f
+        /** The bout card's career rows: his ranking above his name, your stake in him below it. */
+        val P_INTRO_RANK = floatArrayOf(320f, 143f); const val SC_INTRO_RANK = 1.8f
+        val P_INTRO_STORY = floatArrayOf(320f, 272f); const val SC_INTRO_STORY = 1.5f
+        /** THE RISE CARD: the number you just took, the trainer's line, and who is walking out next. */
+        val P_RISE_1 = floatArrayOf(320f, 160f); const val SC_RISE_1 = 3.4f
+        val P_RISE_2 = floatArrayOf(320f, 205f); const val SC_RISE_2 = 2.0f
+        val P_RISE_3 = floatArrayOf(320f, 262f); const val SC_RISE_3 = 1.7f
+        val P_RISE_4 = floatArrayOf(320f, 300f); const val SC_RISE_4 = 2.4f
         /** Only the fallback now: the intro card and the marquee take the live fighter's name. */
         const val INTRO_NAME = "THE ROOSTER"
         const val INTRO_FULL = "ROY RUDD"
@@ -198,7 +206,7 @@ class Hud(private val out: Sink) {
     }
 
     /** Which plate is being drawn. Kept separate from `State` so the two can move apart. */
-    enum class Phase { TITLE, INTRO, ROUND_CARD, FIGHT, COUNT, CORNER, KO, GAME_OVER, CREDITS }
+    enum class Phase { TITLE, INTRO, ROUND_CARD, FIGHT, COUNT, CORNER, KO, RISE, GAME_OVER, CREDITS }
 
     /** What a glove of yours is doing on the plate (§7.6). */
     enum class Glove { REST, AIM_LOW, GUARD, PUNCH, SPECIAL }
@@ -232,6 +240,17 @@ class Hud(private val out: Sink) {
         /** The bout card's two lines: who he is, and his one line of billing. */
         var introName = INTRO_NAME
         var introBilling = INTRO_FULL
+        /** The bout card's career rows (Fighter.rank / Fighter.story). Empty = not drawn. */
+        var introRank = ""
+        var introStory = ""
+        // ---- the rise card (Fight.State.RISE)
+        /** The headline: the ranking just taken, or the belt. */
+        var riseHead = ""
+        /** The trainer's line, drawn as it is spoken. */
+        var riseLine = ""
+        /** Who is already walking to the ring; empty on the last one. */
+        var riseNext = ""
+        var riseChampion = false
         var hisHp = 1f
         var hisKd = 0
         var yourName = "YOU"
@@ -427,6 +446,7 @@ class Hud(private val out: Sink) {
             Phase.ROUND_CARD -> roundCard(m)
             Phase.COUNT -> count(m)
             Phase.KO -> knockout(m)
+            Phase.RISE -> rise(m)
             Phase.GAME_OVER -> gameOver(m)
             else -> {}
         }
@@ -659,9 +679,39 @@ class Hud(private val out: Sink) {
     }
 
     private fun intro(m: Model) {
+        if (m.introRank.isNotEmpty()) { color(WHITE_GOLD, 0.85f); textC(m.introRank, P_INTRO_RANK[0], P_INTRO_RANK[1], SC_INTRO_RANK) }
         color(MAGENTA, 0.95f); textC(m.introName, P_INTRO_1[0], P_INTRO_1[1], SC_INTRO_1)
         color(WHITE, 0.7f); textC(m.introBilling, P_INTRO_2[0], P_INTRO_2[1], SC_INTRO_2)
-        color(WHITE, 0.5f); textC(INTRO_CORNER, P_INTRO_3[0], P_INTRO_3[1], SC_INTRO_3)
+        // WHAT BEATING HIM WOULD MEAN, in the player's second person, ON THE ROW THE WEIGHT USED
+        // TO HAVE. `120 LB - FAR CORNER` was one hardcoded string for all five men and it was a
+        // lie about four of them — the Anvil is a wardrobe — and the row below it is over the
+        // boxer's head, where a long line is unreadable against the ring. So the card is now rank,
+        // name, billing, stake: four rows, all of them true, all of them on black.
+        if (m.introStory.isNotEmpty()) { color(CYAN, 0.62f); textC(m.introStory, P_INTRO_3[0], P_INTRO_3[1], SC_INTRO_STORY) }
+        else { color(WHITE, 0.5f); textC(INTRO_CORNER, P_INTRO_3[0], P_INTRO_3[1], SC_INTRO_3) }
+    }
+
+    /**
+     * THE RISE CARD — what a career looks like between two fights (VOICE.md 6.6).
+     *
+     * It replaces the drop back to the attract screen after a knockout. Three rows and no input:
+     * the ranking just taken (or the belt), the trainer's one line as he says it, and the name of
+     * the man already walking out. The player does not insert anything; the next fight is coming
+     * whether they are ready or not, which is the whole feeling the card exists to produce.
+     */
+    private fun rise(m: Model) {
+        val fade = (m.phaseT / 0.3f).coerceIn(0f, 1f)
+        color(if (m.riseChampion) WHITE_GOLD else ACID, 0.95f * fade)
+        textC(m.riseHead, P_RISE_1[0], P_RISE_1[1], SC_RISE_1)
+        if (m.riseLine.isNotEmpty()) {
+            val a = ((m.phaseT - 0.8f) / 0.4f).coerceIn(0f, 1f)
+            color(WHITE, 0.8f * a); textC(m.riseLine, P_RISE_2[0], P_RISE_2[1], SC_RISE_2)
+        }
+        if (m.riseNext.isNotEmpty()) {
+            val a = ((m.phaseT - 2.0f) / 0.5f).coerceIn(0f, 1f)
+            color(WHITE, 0.45f * a); textC("NEXT", P_RISE_3[0], P_RISE_3[1], SC_RISE_3)
+            color(MAGENTA, 0.9f * a); textC(m.riseNext, P_RISE_4[0], P_RISE_4[1], SC_RISE_4)
+        }
     }
 
     private fun roundCard(m: Model) {

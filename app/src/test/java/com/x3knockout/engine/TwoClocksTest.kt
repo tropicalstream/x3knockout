@@ -31,83 +31,10 @@ import org.junit.Test
  */
 class TwoClocksTest {
 
-    companion object { private const val DT = 1f / 60f }
+    companion object { private const val DT = Desk.DT }
 
-    /** A `SharedPreferences` over a map: what `SettingsStore` reads and writes, without a disk or a device. */
-    private class FakePrefs : SharedPreferences {
-        private val map = HashMap<String, Any?>()
-        override fun getAll(): MutableMap<String, *> = map
-        override fun getString(key: String?, def: String?): String? = map[key] as? String ?: def
-        @Suppress("UNCHECKED_CAST")
-        override fun getStringSet(key: String?, def: MutableSet<String>?): MutableSet<String>? = (map[key] as? MutableSet<String>) ?: def
-        override fun getInt(key: String?, def: Int): Int = map[key] as? Int ?: def
-        override fun getLong(key: String?, def: Long): Long = map[key] as? Long ?: def
-        override fun getFloat(key: String?, def: Float): Float = map[key] as? Float ?: def
-        override fun getBoolean(key: String?, def: Boolean): Boolean = map[key] as? Boolean ?: def
-        override fun contains(key: String?): Boolean = map.containsKey(key)
-        override fun edit(): SharedPreferences.Editor = Ed()
-        override fun registerOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
-        override fun unregisterOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
-        private inner class Ed : SharedPreferences.Editor {
-            override fun putString(k: String?, v: String?): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun putStringSet(k: String?, v: MutableSet<String>?): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun putInt(k: String?, v: Int): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun putLong(k: String?, v: Long): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun putFloat(k: String?, v: Float): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun putBoolean(k: String?, v: Boolean): SharedPreferences.Editor { map[k!!] = v; return this }
-            override fun remove(k: String?): SharedPreferences.Editor { map.remove(k); return this }
-            override fun clear(): SharedPreferences.Editor { map.clear(); return this }
-            override fun commit(): Boolean = true
-            override fun apply() {}
-        }
-    }
-
-    private class FakeContext : ContextWrapper(null) {
-        private val files = HashMap<String, SharedPreferences>()
-        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = files.getOrPut(name ?: "") { FakePrefs() }
-    }
-
-    /** The device, as a list of what the fight asked of it. */
-    private class RecordingHost : GameHost {
-        val said = ArrayList<String>()
-        val sounds = ArrayList<Int>()
-        val tracks = ArrayList<String>()
-        override fun sfx(id: Int, pitch: Float, vol: Float) { sounds.add(id) }
-        override fun crowd(level: Float, rate: Float) {}
-        override fun say(id: String, urgent: Boolean, patienceMs: Long) { said.add(id) }
-        override fun sayAll(ids: List<String>) { said.addAll(ids) }
-        override fun stopVoice() {}
-        override fun hero(id: String, urgent: Boolean, patienceMs: Long) { said.add(id) }
-        override fun stopHero() {}
-        override fun musicEnabled(on: Boolean) {}
-        override fun voiceEnabled(on: Boolean) {}
-        override fun recentreHead() {}
-        override fun recentreYaw() {}
-        override fun applyVolume(v0to10: Int) {}
-        override fun voiceDurationMs(id: String): Int = 0
-        override fun heroDurationMs(id: String): Int = 0
-        override fun voiceBusy(): Boolean = false
-        override fun quitGame() {}
-        override fun music(track: String) { tracks.add(track) }
-    }
-
-    /** One fight on the desk: a fed body, sixty frames a second, the harness launch. */
-    private class Rig {
-        val host = RecordingHost()
-        val store = SettingsStore(FakeContext())
-        val fight = Fight(store, host)
-        var motion = 0f; var roll = 0f; var pitchG = 0f
-        fun frame() { fight.feedBody(motion, roll, pitchG); fight.update(DT, 0f, 0f, true) }
-        fun run(seconds: Float) { var t = 0f; while (t < seconds - 1e-4f) { frame(); t += DT } }
-        /** `am start … --ef floor F --es drill peck_l`: the card, then the bell. The drill keeps him from throwing for 2.5 world seconds and takes no damage either way. */
-        fun toFight(floor: Float = 0f, drill: String? = "peck_l") {
-            fight.boot()
-            fight.debugStart(1, floor, 0, drill, null)
-            var guard = 0
-            while (fight.state != State.FIGHT && guard++ < 600) frame()
-            assertEquals("the harness reaches the bell", State.FIGHT, fight.state)
-        }
-    }
+    /** The harness lives in [Desk] now: one engine rig, two suites. */
+    private fun Rig() = Desk.Rig()
 
     @Test
     fun aPunchForcesTheWorldAndAWhiffIsTaxed() {

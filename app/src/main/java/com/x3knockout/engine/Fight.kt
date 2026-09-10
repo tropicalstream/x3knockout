@@ -68,7 +68,11 @@ interface GameHost {
  *  - GAME_OVER: your third knockdown, a count you did not beat, or `TIME - NO DECISION`;
  *    `INSERT COIN TO CONTINUE`, 9 s.
  */
-enum class State { TITLE, INTRO, ROUND_CARD, FIGHT, KNOCKDOWN_COUNT, ROUND_END, KO, GAME_OVER }
+/**
+ * RISE sits between a knockout and the next man (VOICE.md 6.6). It is the only state the player
+ * cannot decline: there is no coin on it, and its exit is the next bout's ceremony.
+ */
+enum class State { TITLE, INTRO, ROUND_CARD, FIGHT, KNOCKDOWN_COUNT, ROUND_END, KO, RISE, GAME_OVER }
 
 /**
  * THE FIGHT. One player standing in a ring, one boxer 2.6 m ahead, and the law: time moves only
@@ -234,6 +238,19 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         const val INTRO_SKIP_T = 1.5f
         const val CORNER_SKIP_T = 1.0f
         const val TALLY_SKIP_T = 1.2f
+        /** The tally is readable for this long, then the card moves on by itself: a career does not wait. */
+        const val KO_TALLY_T = 6.0f
+        /** The rise card's floor and ceiling, real seconds. A tap skips it after RISE_SKIP_T. */
+        const val RISE_MIN_T = 4.5f
+        const val RISE_MAX_T = 15f
+        const val RISE_SKIP_T = 1.0f
+        /** The player, and the ladder he is climbing (VOICE.md 6.6). */
+        const val YOU_NAME = "KID COLUMBIA"
+        /** Bump when a stored story flag changes meaning; see `SettingsStore.healStory`. */
+        const val STORY_V = 1
+        const val YOU_HOME = "WASHINGTON D.C."
+        /** The plate's font is A-Z 0-9 and seven marks — no `#`, so the word is spelled out. */
+        fun rankWord(r: Int) = when (r) { 0 -> "CHAMPION"; in 1..4 -> "RANKED NO. $r"; else -> "UNRANKED" }
         const val GAMEOVER_SKIP_T = 1.2f
         const val CONTINUE_S = 9f
         /**
@@ -244,7 +261,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
          * least the floor whatever the bus says, and at most the ceiling whatever it does not.
          */
         const val INTRO_MIN_T = 3.0f
-        const val INTRO_MAX_T = 12f
+        const val INTRO_MAX_T = 22f
         /** After the continue countdown expires the card returns to the attract by itself. */
         const val GAMEOVER_HOLD_T = 3.0f
         /** Rise from your own knockdown: 8 alternated taps before "10"; a same-hand double counts once. */
@@ -311,6 +328,20 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             Lines.TIP_STILL to "READ HIM, THEN MOVE.|STANDING STILL IS NOT A PLAN.",
             Lines.TIP_STEP to "DON'T PUNCH AND RUN.",
             Lines.TIP_SPECIAL to "THE METER'S LIT. BOTH HANDS.",
+        )
+
+        /**
+         * THE TRAINER'S CAREER LINES, drawn as he says them (VOICE.md 6.6). Same discipline as
+         * [TIP_CAPTIONS]: the caption is a SHORTER, upper-case rendering of the clip, never the
+         * clip's text pasted in, because the ear and the eye are reading at different speeds and
+         * `|` is the plate's line break, which no spoken line may contain.
+         */
+        val CLIMB_CAPTIONS: Map<String, String> = mapOf(
+            "climb_1" to "ONE DOWN.|NOBODY KNOWS YOUR NAME YET.",
+            "climb_2" to "THEY'RE SAYING IT NOW.|SAY IT BACK WITH YOUR HANDS.",
+            "climb_3" to "YOU WALKED THROUGH A WALL.|DON'T STOP TO LOOK AT IT.",
+            "climb_4" to "ONE MORE, KID.|ONE MORE AND YOU'RE NOT THE KID.",
+            "climb_5" to "OUT OF THE DISTRICT.|CHAMPION OF THE WORLD.",
         )
 
         /** [hitBy]'s extra slots past the five attacks: your punches on his guard, stalls, rejected steps, a lit meter never spent. */
@@ -550,7 +581,9 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             if (canQuit) liveMenu.add("QUIT")
             return liveMenu
         }
-    val canQuit: Boolean get() = state == State.TITLE || state == State.GAME_OVER
+    // The rise card is a card: there is nothing to punch on it, so the menu is on offer there the
+    // same as on the title. INTRO, ROUND_CARD and KO stay closed — the player may still be tapping.
+    val canQuit: Boolean get() = state == State.TITLE || state == State.GAME_OVER || state == State.RISE
     var menuSel = 0; private set
     var menuTop = 0; private set
     private var resetArmed = false
@@ -626,6 +659,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         // again to reach the Sardine — the ladder is a record of what they can do, so it is read
         // back here. A debug launch has already set the bout by hand and disabled records, so it
         // must not be overwritten by the stored one.
+        store.healStory(STORY_V)
         if (store.recordsEnabled) boutIndex = store.boutReached.coerceIn(0, Fighter.CARD.size - 1)
         clock.log = { Log.i(TAG, it) }
         boxer.log = { Log.i(TAG, it) }
@@ -725,7 +759,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             State.TITLE -> coin()
             State.INTRO -> if (stateT > INTRO_SKIP_T) introSkipWanted = true
             State.ROUND_END -> if (stateT > CORNER_SKIP_T) skipCorner()
-            State.KO -> if (stateT > TALLY_SKIP_T) enterTitle()
+            State.KO -> if (stateT > TALLY_SKIP_T) enterRise()
+            State.RISE -> if (stateT > RISE_SKIP_T) leaveRise()
             State.GAME_OVER -> if (gameOverT > GAMEOVER_SKIP_T) { if (continueLeft > 0f) continueGame() else enterTitle() }
             State.FIGHT, State.KNOCKDOWN_COUNT -> {}   // urgent taps went through [punch]; a settled burst adds nothing
             else -> {}
@@ -1129,6 +1164,88 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
     // ================================================================== FLOW
 
+    // ------------------------------------------------------------------ THE CAREER (VOICE.md 6.6)
+    /** What the last knockout earned: his ranking, whether it was the belt, and which bout it was. */
+    var riseRankTaken = 4; private set
+    var riseChampion = false; private set
+    private var riseBout = 0
+    /** The three rows the plate draws; built once on entry so the card cannot drift from the voice. */
+    var riseHead = ""; private set
+    var riseLine = ""; private set
+    var riseNext = ""; private set
+    /** The player's own standing: the highest ranking he has taken, or the belt. */
+    val yourRank: Int
+        get() = if (store.champion) 0 else {
+            val done = store.boutReached.coerceIn(0, Fighter.CARD.size - 1)
+            if (done <= 0) 5 else Fighter.at(done - 1).rank
+        }
+    val yourNamePlate: String get() = if (store.champion) "CHAMPION" else YOU_NAME
+
+    /**
+     * THE RISE — the card between two fights, and the reason there is no coin between them.
+     *
+     * The owner's ruling: *"the next boxer should automatically come next... an inspirational
+     * dramatic rise to the top rocky story."* A knockout used to drop the player back to the
+     * attract screen, which is the arcade's business model and not a story: it ends the evening
+     * every time the player wins. Now the knockout tally runs its six seconds, this card takes the
+     * ranking off the man on the floor, the trainer says the one line he has for this rung, and
+     * the next man's ceremony begins — no input, and none available except a tap to hurry it.
+     *
+     * The last one is not a rise, it is the ENDING: the belt, the trainer's last line, no NEXT,
+     * and the only exit on the card that still goes back to the title.
+     */
+    private fun enterRise() {
+        state = State.RISE; stateT = 0f; menuOpen = false
+        clearVerbs()
+        clock.clearForced(); clock.floorOverride = -1f
+        val ids = ArrayList<String>(2)
+        if (riseChampion) {
+            riseHead = "CHAMPION OF THE WORLD"
+            riseNext = ""
+            ids += Lines.WINNER_BELT
+        } else {
+            riseHead = rankWord(riseRankTaken)
+            riseNext = Fighter.at(boutIndex + 1).name
+            ids += Lines.rank(riseRankTaken)
+        }
+        // The KO tally is this bout's; the rise card is the CAREER's, which is the only place the
+        // player ever sees what the whole climb has been worth.
+        val climb = Lines.climb(riseBout)
+        riseLine = CLIMB_CAPTIONS[climb] ?: ""
+        ids += climb
+        host.sayAll(ids)
+        host.music(if (riseChampion) Music.WIN else Music.TITLE)
+        Log.i(TAG, "RISE rank=$riseRankTaken champion=$riseChampion next=${riseNext.ifEmpty { "-" }}")
+        ev("CLIMB")
+    }
+
+    /**
+     * UP THE CARD, on the way out of the rise card. Beating the last man leaves the ladder where
+     * it is, so the champion can be fought again rather than the card silently wrapping round to
+     * the Rooster and making the achievement disappear.
+     */
+    private fun promote() {
+        if (boutIndex < Fighter.CARD.size - 1) {
+            boutIndex++
+            store.boutReached = boutIndex
+            Log.i(TAG, "CARD advanced to ${boutIndex + 1}/${Fighter.CARD.size} ${Fighter.at(boutIndex).name}")
+        }
+    }
+
+    /** The rise card's one exit: the next man's ceremony, or — after the belt — the attract screen. */
+    private fun leaveRise() {
+        if (riseChampion) { enterTitle(); return }
+        promote()
+        newFight()
+        enterIntro()
+    }
+
+    private fun updateRise() {
+        val silent = !store.voice
+        val done = stateT >= RISE_MIN_T && (silent || !host.voiceBusy())
+        if (done || stateT >= RISE_MAX_T) leaveRise()
+    }
+
     private fun enterTitle() {
         state = State.TITLE; stateT = 0f; menuOpen = false; creditsOpen = false
         downWho = null; countStarted = false; koRoarT = 0f
@@ -1153,6 +1270,14 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
     /** Put a specific fighter up — the debug launch (`--ei bout N`) and the tests. */
     fun setBout(i: Int) { boutIndex = i.coerceIn(0, Fighter.CARD.size - 1) }
+
+    /**
+     * THE CAREER'S RUNNING TOTAL. [newFight] zeroes `score` for every bout, which is right for the
+     * scoreboard and wrong for a career: five knockouts used to leave four of them unrecorded.
+     * This survives a bout and is reset by a coin — it is what the rise card totals up, and what
+     * the last card measures the whole climb by.
+     */
+    var careerScore = 0; private set
 
     private fun newFight() {
         score = 0; multiplier = 1; dodgeStreak = 0; newHigh = false; hits = 0; perfects = 0
@@ -1182,6 +1307,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     }
 
     private fun startGame() {
+        careerScore = 0
         newFight()
         store.fights = store.fights + 1
         host.sfx(Sfx.START)
@@ -1195,10 +1321,30 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         enterRoundCard()
     }
 
+    /**
+     * THE CEREMONY, AND IT NAMES BOTH MEN NOW (VOICE.md 5, 6.6).
+     *
+     * It used to be three generic clips — "Ladies and gentlemen", "Three rounds of boxing",
+     * "Seconds out" — and the five `intro_<fighter>` clips the script has always rendered were
+     * unreachable, because nothing ever asked for them: the announcer never once said who the
+     * player was about to fight. He does now, and he says who the PLAYER is first, because that
+     * is the order a real card is read and because `intro_you` is the line the player hears five
+     * times on the way up. `title_shot` goes in ahead of the champion's name and nowhere else, so
+     * the last bout announces itself as different before a punch is thrown.
+     *
+     * `intro_3` stays last because [onVoiceLineEnd] ends the state on it. A tap skips the whole
+     * thing at any point (`introSkipWanted`), which is what makes a 17-second ceremony affordable.
+     */
     private fun enterIntro() {
         state = State.INTRO; stateT = 0f; introSkipWanted = false; introEnded = false
         boxer.taunt()
-        host.sayAll(listOf(Lines.INTRO_1, Lines.INTRO_2, Lines.INTRO_3))
+        val ids = ArrayList<String>(5)
+        ids += Lines.INTRO_1
+        ids += Lines.INTRO_YOU
+        if (fighter.rank == 0) ids += Lines.TITLE_SHOT
+        ids += "intro_" + fighter.id
+        ids += Lines.INTRO_3
+        host.sayAll(ids)
     }
 
     /** The intro ends at a line's end ([onVoiceLineEnd]); this is its floor and its ceiling, and the skip when the bus is silent. */
@@ -1254,11 +1400,12 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         if (round >= ROUNDS) {
             noDecision = true
             boxer.win()
-            host.sfx(Sfx.BELL); host.say(Lines.NO_DECISION, urgent = true)
+            host.sfx(Sfx.BELL); host.say(Lines.REF_TIME, urgent = true); host.say(Lines.NO_DECISION, patienceMs = 2500L)
             Log.i(TAG, "NO DECISION"); ev("NO DECISION")
             gameOver()
             return
         }
+        host.say(Lines.REF_BREAK, urgent = true)
         state = State.ROUND_END; stateT = 0f
         clock.clearForced(); clock.forceCorner()
         hp = (hp + CORNER_HEAL).coerceAtMost(HP_MAX); hearts = HEARTS; heartRefillT = 0f
@@ -1320,20 +1467,26 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         credit(bonus, "TIME BONUS", mult = false)
         score = (score * DIFF_MULT[store.difficulty.coerceIn(0, 2)]).toInt()
         newHigh = score > store.highScore && score > 0
-        store.highScore = score; store.bestKoMs = koRealMs; store.champion = true; store.knockdownScored = true
-        // UP THE CARD. The next coin meets the next man; beating the last one leaves the ladder
-        // where it is, so the champion can be fought again rather than the card silently wrapping
-        // round to the Rooster and making the achievement disappear.
-        if (boutIndex < Fighter.CARD.size - 1) {
-            boutIndex++
-            store.boutReached = boutIndex
-            Log.i(TAG, "CARD advanced to ${boutIndex + 1}/${Fighter.CARD.size} ${Fighter.at(boutIndex).name}")
-        }
+        // THE BELT IS THE LAST MAN, NOT ANY MAN. `champion` used to be set by every knockout, so
+        // one win over a club fighter renamed the player CHAMPION for the rest of the install.
+        // It is the ending now, and the scoreboard reads the ranking on the way up instead.
+        val wasLast = boutIndex == Fighter.CARD.size - 1
+        riseRankTaken = fighter.rank; riseChampion = wasLast; riseBout = boutIndex
+        careerScore += score
+        store.highScore = score; store.bestKoMs = koRealMs; store.knockdownScored = true
+        if (wasLast) store.champion = true
+        // THE PROMOTION IS NOT HERE ANY MORE — see [promote], called when the rise card ENDS.
+        //
+        // It used to fire on this line, and the cost was visible on the glass: `fight.fighter` is
+        // read by the scoreboard, by the bout card and by the renderer's strip hot-swap, so the
+        // instant a man hit the canvas the game re-skinned him as the NEXT man and put the next
+        // man's name over his body for the whole KO tally. Promoting on the way OUT of the rise
+        // card fixes all three at once and moves the strip load to a card instead of a corpse.
         tally = listOf("TIME ${clockText(fightRealT)}", "HITS $hits", "PERFECTS $perfects", "KNOCKDOWNS ${boxer.knockdownsFight}", "TIME BONUS $bonus", "SCORE $score")
         clearVerbs()
         clock.clearForced(); clock.forceSlow(Clock.SLOW_KO_RATE, Clock.SLOW_KO_T)
         bells(3, BELL_GAP_KO_T)
-        host.say(Lines.WINNER_KO, urgent = true)
+        host.say(if (boxer.knockdownsRound >= Boxer.TKO_KNOCKDOWNS_ROUND) Lines.WINNER_TKO else Lines.WINNER_KO, urgent = true)
         host.music(Music.WIN)
         koRoarT = KO_ROAR_T
         Log.i(TAG, "KO real=%.1f score=%d bonus=%d mult=x%d newHigh=%s".format(Locale.US, fightRealT, score, bonus, prevMult, newHigh))
@@ -1408,6 +1561,9 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
         when (state) {
             State.TITLE -> { body(dt); boxer.update(clock.wdt, dt, body) }
+            // The rise card runs him on REAL time: he is on the canvas, outside the bubble, the
+            // way the count is (DESIGN.md 2.9) — the fight is over and nothing here can hurt anyone.
+            State.RISE -> { body(dt); boxer.update(dt, dt, body); updateRise() }
             State.INTRO -> { body(dt); boxer.update(clock.wdt, dt, body); updateIntro() }
             State.ROUND_CARD -> {
                 body(dt); boxer.update(clock.wdt, dt, body)
@@ -1421,7 +1577,10 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 body(dt); fightRealT += dt; boxer.update(clock.wdt, dt, body)
                 if (clock.forced != Clock.Forced.CORNER && stateT >= cornerHold) { round++; enterRoundCard() }
             }
-            State.KO -> { body(dt); boxer.update(clock.wdt, dt, body) }
+            // THE TALLY HANDS OVER BY ITSELF. This branch had no timer at all: the only way off the
+            // KO card was a tap, and the only place that tap went was the attract screen. A career
+            // does not wait to be asked (VOICE.md 6.6) — it runs on `dt`, like every other card.
+            State.KO -> { body(dt); boxer.update(clock.wdt, dt, body); if (stateT >= KO_TALLY_T) enterRise() }
             State.GAME_OVER -> {
                 body(dt); boxer.update(clock.wdt, dt, body)
                 gameOverT += dt
@@ -1516,6 +1675,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             State.FIGHT -> 0.25f + 0.75f * crowdLevel
             State.KNOCKDOWN_COUNT -> if (countStarted && countN >= COUNT_CROWD_FROM) 0.35f + 0.12f * (countN - COUNT_CROWD_FROM) else 0.15f
             State.KO -> if (koRoarT > 0f) 1f else 0.5f
+            State.RISE -> if (riseChampion) 0.9f else 0.45f
             State.INTRO, State.ROUND_CARD, State.ROUND_END -> 0.2f
             State.GAME_OVER -> 0.15f
             State.TITLE -> 0f
@@ -1704,6 +1864,11 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         store.knockdownScored = true
         chain = 0; hitsUnanswered = 0
         host.say(if (bySpecial && final) Lines.SLEEP else Lines.KNOCKDOWN, urgent = true)
+        // The referee sends you to a neutral corner on every knockdown but the last, and on a TKO
+        // he is the man who says it is over — the announcer's `winner_ko` is the wrong sentence
+        // for a stoppage, and `winner_tko` has been sitting rendered and unreferenced.
+        if (tko && !ko) host.say(Lines.REF_STOP, urgent = true)
+        else if (!final) host.say(Lines.REF_NEUTRAL, patienceMs = 2200L)
         beginCount(Who.HIM, if (final) 0 else riseAtN)
         Log.i(TAG, "KNOCKDOWN who=HIM n=$n count=${if (final) 0 else riseAtN} ko=$final")
         if (tko && !ko) Log.i(TAG, "TKO round=$round knockdowns=${boxer.knockdownsRound}")
@@ -1820,7 +1985,9 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 host.sfx(when { glance -> Sfx.GLANCE; attack == Boxer.Attack.WING_L -> Sfx.HIT_BODY; else -> Sfx.HIT_HEAD }, 0.85f, if (glance) 0.6f else 0.9f)
                 if (glance) word = "GLANCE"
                 if (!drill && hitsUnanswered >= CHANT_AFTER_HITS && hitsUnanswered % CHANT_AFTER_HITS == 0) {
-                    host.say(Lines.CHANT, false, 1500L); chant = "ROO-STER"; chantT = 2f
+                    // The crowd chants the man in the ring, not the Rooster forever. `chant_<id>`
+                    // is rendered for all five and reached through the host's per-fighter resolve.
+                    host.say(Lines.CHANT, false, 1500L); chant = fighter.name.removePrefix("THE "); chantT = 2f
                 }
                 if (winded && hp > 0) word = "WINDED"
                 if (hp <= 0 && !drill) yourKnockdown(attack)

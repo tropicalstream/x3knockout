@@ -25,6 +25,7 @@ import com.x3knockout.audio.VoiceBus
 import com.x3knockout.engine.Fight
 import com.x3knockout.engine.GameHost
 import com.x3knockout.engine.Hand
+import com.x3knockout.engine.Lines
 import com.x3knockout.engine.Swipe
 import com.x3knockout.gl.GLRenderer
 import com.x3knockout.head.HeadTracker
@@ -421,6 +422,20 @@ class MainActivity : Activity(), GameHost {
     override fun sfx(id: Int, pitch: Float, vol: Float) = sfx.play(id, pitch, vol)
     override fun crowd(level: Float, rate: Float) = sfx.crowd(level, rate)
     /**
+     * THE ENGINE'S ID -> THE SCRIPT'S STEM, for the five lines the man in the ring says himself.
+     *
+     * `Terms.Lines` names them after the ROOSTER'S WORDS (`rise_and_shine` is his crow, `cluck` is
+     * his taunt) because he was the only boxer when they were written; `docs/VOICE.md` 6.5 names
+     * them after what they ARE (`crow`, `taunt`), because it has to write five of each. Nothing
+     * joined the two, so `forFighter("rise_and_shine")` looked for `rise_and_shine_anvil`, found
+     * nothing, and played the Rooster at Duke Odell. This table is the join, and it lives here
+     * rather than in `Lines` because it is a fact about the ASSETS, not about the fight.
+     */
+    private val HIS_STEM = mapOf(
+        Lines.RISE_AND_SHINE to "crow", Lines.RISE_CUT to "crow_cut",
+        Lines.WAKE_UP to "hit", Lines.CLUCK to "taunt", Lines.THAT_ALL to "guard")
+
+    /**
      * HIS OWN VOICE IF HE HAS ONE. The card's five men share the line IDS but not always the line:
      * the script renders `chant_anvil`, `hit_silk`, `crow_metronome` and so on, and asking for
      * `chant` while the Anvil is in the ring should get the Anvil's. The manifest is the authority
@@ -428,14 +443,25 @@ class MainActivity : Activity(), GameHost {
      * gains a voice by having clips rendered for him and nothing in the code changes.
      */
     private fun forFighter(id: String): String {
-        val v = id + "_" + game.fighter.id
-        return if (voice.durations.containsKey(v) || hero.durations.containsKey(v)) v else id
+        val stem = HIS_STEM[id] ?: id
+        val v = stem + "_" + game.fighter.id
+        if (voice.durations.containsKey(v) || hero.durations.containsKey(v)) return v
+        // A stem with no clip for THIS man falls back to the first man's rather than to the base,
+        // because the base is the Rooster's performance anyway and a missing crow is a silent
+        // fairness bug: the Sunrise has no other audio tell (VOICE.md 4).
+        val r = stem + "_rooster"
+        if (stem !== id && (voice.durations.containsKey(r) || hero.durations.containsKey(r))) return r
+        return id
     }
 
     override fun say(id: String, urgent: Boolean, patienceMs: Long) = voice.say(forFighter(id), urgent, patienceMs)
     override fun sayAll(ids: List<String>) = voice.sayAll(ids)
     override fun stopVoice() { voice.stop(); refreshDuck() }
-    override fun hero(id: String, urgent: Boolean, patienceMs: Long) = hero.say(id, urgent, patienceMs)
+    // THE HERO TRACK GOES THROUGH THE SAME RESOLUTION, which it did not before: `hero()` called
+    // `hero.say(id)` raw, so every one of the twenty-four per-fighter clips the script renders was
+    // unreachable and all five men spoke the base performance. With five separate fish.audio
+    // voices on the card that stopped being a subtlety and became the whole point.
+    override fun hero(id: String, urgent: Boolean, patienceMs: Long) = hero.say(forFighter(id), urgent, patienceMs)
     override fun stopHero() { hero.stop(); refreshDuck() }
     override fun musicEnabled(on: Boolean) { music.enabled = on }
     /**

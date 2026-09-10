@@ -39,18 +39,42 @@ fact identifies him instantly on a small headset speaker, and it is why he is th
 
 ---
 
-## 2. THE FIVE MEN
+## 2. THE CAST — seven models, chosen by the owner (2026-09-10)
 
-All five go through one shared `BOXER` chain, so they occupy the same physical space and differ
-only as people.
+**THE THIRD CASTING IS THE ONE THAT SHIPS.** The first was macOS's 1980s formant synths, and the
+owner's verdict was the whole argument: *"the voices sound too robotic. this is an emotional sport
+not a reobot competition."* The second put real voices on the ANNOUNCER, the REFEREE and the
+CORNER but left the five boxers as ONE fish.audio model pitch-shifted five ways — which is a
+costume, not a cast. A flyweight and a heavyweight are not the same performance at different
+speeds; they are different people, and on a card whose entire premise is five men you can tell
+apart across a dark room, the ear has to be told that too.
 
-| Fighter | Voice | Rate | Shift | Extra filter | Why |
-|---|---|---|---|---|---|
-| rooster | Junior | 190 | +1 st | — | small, brassy, too pleased with himself: 120 lb of showboat |
-| sardine | Rocko | 215 | +2 st | — | the rate is the character. He never says one thing either |
-| anvil | Grandpa | 175 | −3 st | `equalizer=f=130:t=q:w=1.0:g=4` | pitched down with a chest resonance: a wardrobe talking |
-| silk | Daniel | 150 | 0 | `volume=0.75` | British, dry, quieter than everyone. Nothing shows, not even volume |
-| metronome | Reed *(or fish.audio)* | 150 | −1 st | — | flat, even, no affect. **Recommended: the champion gets the fish.audio render** — one living voice arriving at the top of a card of synthesised men *is* the escalation, and it is five API calls |
+So the owner picked seven models by URL, and they are the cast:
+
+| Role | fish.audio reference id | Chain | Why this position needs a person |
+|---|---|---|---|
+| ANNOUNCER | `ac192aa6102d4d669e1af4e4351cf89d` | long double echo + gentle compression | the house PA: the institution, the city, the number, the title |
+| REFEREE | `1443bdae8a9546d6bb451cc4816cfdfd` | one 38 ms slap + firmer compression | in the ring with you, no microphone |
+| rooster | `1bf2dee1ca2848b5bc0580a4d9301341` | the shared BOXER slap | 120 lb of showboat, too pleased with himself |
+| sardine | `97050f3ee6dd49f8b2b58de51ed21269` | " | never says one thing either |
+| anvil | `44db4aafb5ff45a7b268beaeead5dec7` | " | a wardrobe talking |
+| silk | `a5f60dc6887548c2bec5190c95d26dee` | " | dry, quiet, nothing shows — not even volume |
+| metronome | `40943e1f497c4256b23d7bc29b0e26f6` | " | flat, even, no affect: the champion keeps your time |
+
+**`BOXER_SHIFT` IS GONE.** Shifting a cast voice undoes the casting, and every semitone of it was
+there to fake a difference that is now real. All five men share the one `BOXER_CHAIN` so they
+stand in the same physical space and differ only as people, which is exactly what §1 asks of them.
+
+**THE CORNER IS STILL macOS GRANDPA**, and it is the one hole in the cast: no model was named for
+him. He survives it better than any other position would, because he is the only voice that is
+never in the room — 30 cm from the player's ear, dry, no reverb at all — so he is separated by
+SPACE rather than by timbre. He is also the voice that carries the story (§6.6), which is an
+argument for recasting him the moment there is an eighth URL: `FISH_VOICE["CORNER"]` is one line.
+
+**A CLIP'S VOICE IS ITS SPEAKER, EXCEPT FOR THE MAN IN THE RING.** `render_voices.fish_id` reads
+the fighter suffix ONLY for the `BOXER` speaker, so `intro_anvil` is the ANNOUNCER naming Duke
+Odell and `guard_anvil` is Duke Odell talking. A BOXER clip with no suffix is the fallback the
+engine reaches for when a man has no line of his own, and it is rendered in the first man's voice.
 
 **Silk's crow is the one place this design nearly broke, and it must not be simplified away.**
 `Attack.SUNRISE` carries `tellSfx = -1` (`Boxer.kt:278` — "the Sunrise is crowed, not played"), so
@@ -296,7 +320,7 @@ is always correct, and it uses the word.
 
 ---
 
-## 6. THE SCRIPT — 84 clips
+## 6. THE SCRIPT — 113 clips (84 + the career's 17 + 12 rendered earlier)
 
 **The tables below are parsed.** Their shape is the contract in §7; do not reformat them. Cells
 after the fourth are for humans and the parser ignores them. `urg` is the bus's `urgent` flag and
@@ -405,6 +429,52 @@ The Metronome's chant is his **surname**: a crowd chants two syllables, never "M
 | `hit_metronome` | BOXER | On the beat. | after he lands a big one | no | 1500 | 1259 |
 | `taunt_metronome` | BOXER | Tick. | the stall taunt | no | 1500 | 900 |
 | `guard_metronome` | BOXER | Late. | your punch on his closed guard | no | 1500 | 922 |
+
+## 6.6 THE RISE — the career (2026-09-10)
+
+> *"the game plot should be the player is a new boxer from washington dc going up in rank to try
+> to defeat the champion, the next boxer should automatically come next. make it an inspirational
+> dramatic rise to the top rocky story."*
+
+**THE PLAYER IS SOMEBODY NOW.** He was `YOU`, a nameplate on the right of the scoreboard. He is
+**KID COLUMBIA, out of Washington, D.C.** — unranked, unknown, and five fights from the belt. The
+card is a LADDER: the Rooster is ranked four, the Sardine three, the Anvil two, Silk one, and Max
+Voss holds the title. Beat a man and you take his ranking, the announcer says the number out loud,
+and the next man is already walking to the ring — there is no coin between fights any more.
+
+**WHY THE CORNER CARRIES THE STORY AND THE ANNOUNCER CARRIES THE STAKES.** The announcer is the
+institution: he says the number, the city and the title, because those are facts about the record.
+The trainer is the only person in the building who is on the player's side, so he gets everything
+that is about the player rather than about the fight. That division is also what keeps the writing
+honest — nobody in a boxing hall makes a speech, so nobody here does either.
+
+Every line is one breath. The longest is nine words.
+
+| id | speaker | text | when | urg | pat |
+|---|---|---|---|---|---|
+| `intro_you` | ANNOUNCER | And in this corner. Out of Washington, D.C. Kid Columbia! | ceremony 0, every bout | sayAll | 8000 |
+| `title_shot` | ANNOUNCER | And now. For the championship of the world! | ceremony 0, the last bout only | sayAll | 8000 |
+| `rank_4` / `_3` / `_2` / `_1` | ANNOUNCER | Ranked. Number four in the world. / Number three in the world. / Number two in the world. / The number one contender! | the rise card, after his rank is taken | no | 4000 |
+| `corner_1` | CORNER | Everybody starts here. He struts. Take the strut off him. | the bout card, fight 1 | no | 4000 |
+| `corner_2` | CORNER | He throws in bunches. Let him empty out. Then answer. | the bout card, fight 2 | no | 4000 |
+| `corner_3` | CORNER | Don't swing at Duke Odell. Make him swing at you. | the bout card, fight 3 | no | 4000 |
+| `corner_4` | CORNER | Nothing shows on this one. Watch his feet, not his face. | the bout card, fight 4 | no | 4000 |
+| `corner_5` | CORNER | Twelve years he's kept the time. Take the beat off him. | the bout card, fight 5 | no | 4000 |
+| `climb_1` | CORNER | One down. Nobody knows your name yet. Keep going. | the rise card, after fight 1 | no | 5000 |
+| `climb_2` | CORNER | They're saying it now. Say it back with your hands. | the rise card, after fight 2 | no | 5000 |
+| `climb_3` | CORNER | You just walked through a wall. Don't stop to look. | the rise card, after fight 3 | no | 5000 |
+| `climb_4` | CORNER | One more, kid. One more and you're not the kid. | the rise card, after fight 4 | no | 5000 |
+| `climb_5` | CORNER | Look at you. Out of the District. Champion of the world. | the ending, after fight 5 | no | 6000 |
+| `not_beaten` | CORNER | You're not beaten. You're on the floor. Different things. | your KO, the continue card | no | 5000 |
+
+`intro_you` is the FIRST clip of the ceremony, ahead of the opponent's `intro_<fighter>`, because
+that is the order a real card is read and because it is the one line the player hears five times:
+by the Metronome it should already sound like his name.
+
+`title_shot` replaces nothing — it is inserted before `intro_metronome` and only there, so the last
+bout announces itself as different before a single punch is thrown.
+
+---
 
 Silk has **no taunt**, deliberately: he is the man who shows nothing, and `FighterVoice.pick`
 returns `""` for a stem with no clip, which every call site already tolerates.
