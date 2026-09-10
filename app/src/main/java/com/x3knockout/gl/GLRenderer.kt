@@ -1244,7 +1244,20 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             void main() {
                 float a = vColor.a;
                 if (uPoint > 0.5) { vec2 d = gl_PointCoord - vec2(0.5); float r = length(d) * 2.0; a *= smoothstep(1.0, 0.2, r); }
-                fragColor = vec4(vColor.rgb * a, a);
+                // NOT PREMULTIPLIED. The blend is (SRC_ALPHA, ONE), so the pipeline ALREADY
+                // multiplies this colour by its own alpha; emitting rgb*a here multiplied it a
+                // second time and every stroke in the game was drawn at alpha SQUARED. A stroke
+                // authored at 0.35 reached the glass at 0.12 — nearly three times too dim — and
+                // only full-alpha strokes were ever correct, which is exactly why bright cores
+                // looked right while everything meant to sit behind them read as murk. On a
+                // waveguide, where the picture IS its own light, that is the difference between
+                // the owner's "vibrant, saturated" and the washed grey he rejects.
+                //
+                // Alpha above 1 still works as the white-hot core: the fragment's alpha clamps to
+                // 1 on a fixed-point target, so a hot stroke simply saturates rather than being
+                // scaled down — the same behaviour as before, since that path never went through
+                // the squaring in a way you could see.
+                fragColor = vec4(vColor.rgb, a);
             }"""
     }
 }

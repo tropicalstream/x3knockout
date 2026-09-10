@@ -725,9 +725,25 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         }
     }
 
+    /**
+     * SETTINGS ARE OFF THE ARENA ONLY — the same ruling the owner made for the tank game, and it
+     * arrives here for the same reason with a different weapon. A tap is a PUNCH. In a fight the
+     * player is tapping as fast as they can, and two of those taps inside the pad's own double-tap
+     * window ARE the gesture that means "pause" — so the game could stop dead mid-exchange because
+     * somebody threw a one-two. No arbitration separates them: they are the same gesture, told
+     * apart only by an interval nobody in a fight is thinking about.
+     *
+     * [MainActivity]'s burst clamp is the first line of defence and this is the second, because the
+     * clamp can only speak for taps it counted: while HE is on the canvas taps are not urgent, the
+     * burst is unclamped, and a right double-tap walked straight into the menu. A rule enforced in
+     * one place is a rule with a hole in it — so the menu is simply not on offer unless the fight
+     * is over ([canQuit]: the title and the game-over card, where there is nothing to punch and
+     * everything the menu holds is a between-fights decision anyway).
+     */
     fun doubleTap() {
         if (creditsOpen) { creditsOpen = false; closeMenu(); return }
-        if (menuOpen) closeMenu() else openMenu()
+        if (menuOpen) { closeMenu(); return }
+        if (canQuit) openMenu() else host.sfx(Sfx.GUARD_THUD, 0.7f, 0.3f)
     }
 
     fun tripleTap() {

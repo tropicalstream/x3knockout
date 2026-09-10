@@ -493,7 +493,12 @@ class MainActivity : Activity(), GameHost {
         burstN++
         // DESIGN.md §1.6 #3: in a fight every burst resolves to nothing — its taps have already
         // gone live as punches, and a 1-2 must never open the pause menu.
-        if (burstN == 1) burstClamped = game.inFight
+        // ...AND IT IS RE-READ ON EVERY TAP, not latched on the first. A burst that OPENS off the
+        // arena and CLOSES inside it — a right tap on the round card, the bell, then a second tap
+        // now in the fight — was resolving as a MENU verb, because the clamp had been decided
+        // 300 ms earlier when there was no fight to protect. The state that matters is the state
+        // the burst RESOLVES in, and any tap that was live is enough to disqualify the burst.
+        if (game.inFight) burstClamped = true
         if (urgent) { burstLive = true; glView.queueEvent { game.punch(Hand.RIGHT, pairMs) } }
         burstR?.let { ui.removeCallbacks(it) }
         val r = Runnable { resolveBurst() }
