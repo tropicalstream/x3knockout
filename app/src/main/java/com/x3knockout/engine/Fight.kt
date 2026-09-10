@@ -1067,7 +1067,13 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 if (o.result == PunchResult.GUARD) {
                     if (!meterLit) meter = (meter + METER_BLOCKED).coerceAtLeast(0)
                     hitBy[HIT_BLOCKED]++
-                    say("BLOCKED"); host.sfx(Sfx.BLOCKED)
+                    // ONE WORD TEACHES THE WHOLE MECHANIC. A punch refused by the elbows is not
+                    // the same event as one refused by the gloves, and the player has to be told
+                    // which — the answer to one is "go downstairs" and to the other "go upstairs".
+                    // A lower-pitched block, deliberately not a new HitKind: BLOCKED_BODY would
+                    // fall through [onHitReaction]'s else arm and play the crowd's OH on a block.
+                    val low = p.level == Level.BODY
+                    say(if (low) "ELBOWS" else "BLOCKED"); host.sfx(Sfx.BLOCKED, if (low) 0.7f else 1f)
                 } else {
                     meter = (meter + METER_DODGED).coerceAtLeast(0)
                     say("WHIFF"); host.sfx(Sfx.WHIFF)

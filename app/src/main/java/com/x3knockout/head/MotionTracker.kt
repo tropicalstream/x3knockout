@@ -3,6 +3,7 @@ package com.x3knockout.head
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
+import com.x3knockout.engine.Clock
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Handler
@@ -70,8 +71,13 @@ class MotionTracker(ctx: Context) : SensorEventListener {
         var W_REF = 1.9f
         /** Body acceleration that counts as "fully moving". A brisk sidestep peaks at 3-5 m/s². */
         var A_REF = 2.2f
-        /** Below this the clock is at its floor: rest noise and breathing must NOT move time. */
-        private const val DEAD_W = 0.08f
+        /** See `Clock.omegaEff`: yaw is priced at `Clock.K_YAW`, pitch and roll in full. */
+        /**
+         * Below this the clock is at its floor: rest noise and breathing must NOT move time.
+         * Raised from 0.08 with [K_YAW]: the same band now has to swallow a tracking gait's
+         * residue as well as breathing, and every gait on the card lands under it.
+         */
+        private const val DEAD_W = 0.12f
         private const val DEAD_A = 0.25f
         /** Attack and release of [motion], seconds. Fast in, slow out: motion is spent, not banked. */
         private const val ATTACK = 0.04f
@@ -158,6 +164,8 @@ class MotionTracker(ctx: Context) : SensorEventListener {
 
     // raw, written on the sensor thread
     @Volatile private var rawW = 0f
+    /** [rawW] with the yaw axis weighted by [K_YAW]: the only angular rate the clock is charged. */
+    @Volatile private var rawWEff = 0f
     @Volatile private var rawWx = 0f; @Volatile private var rawWy = 0f; @Volatile private var rawWz = 0f
     @Volatile private var rawAx = 0f; @Volatile private var rawAy = 0f; @Volatile private var rawAz = 0f
     @Volatile private var rawGx = 0f; @Volatile private var rawGy = 9.81f; @Volatile private var rawGz = 0f
@@ -235,6 +243,10 @@ class MotionTracker(ctx: Context) : SensorEventListener {
                 val x = e.values[0]; val y = e.values[1]; val z = e.values[2]
                 rawWx = x; rawWy = y; rawWz = z
                 rawW = sqrt(x * x + y * y + z * z)
+                // The clock's own magnitude, with the look priced down (see [K_YAW]). The raw one
+                // above is kept for the telemetry, the step detector and the rails, all of which
+                // want the head's real speed and not what it is being charged for.
+                rawWEff = Clock.omegaEff(x, y, z)
             }
             Sensor.TYPE_LINEAR_ACCELERATION -> { rawAx = e.values[0]; rawAy = e.values[1]; rawAz = e.values[2]; hasData = true }
             Sensor.TYPE_GRAVITY -> { rawGx = e.values[0]; rawGy = e.values[1]; rawGz = e.values[2] }
@@ -255,11 +267,12 @@ class MotionTracker(ctx: Context) : SensorEventListener {
         }
         val ax = rawAx; val ay = rawAy; val az = rawAz
         val w = rawW
+        val wEff = rawWEff
         val a = sqrt(ax * ax + ay * ay + az * az)
         peakW = max(peakW, w); peakA = max(peakA, a)
 
         // the clock's input: the larger of the two, past its dead band, normalised and shaped
-        val mw = ((w - DEAD_W) / (W_REF - DEAD_W)).coerceIn(0f, 1f)
+        val mw = ((wEff - DEAD_W) / (W_REF - DEAD_W)).coerceIn(0f, 1f)
         val ma = ((a - DEAD_A) / (A_REF - DEAD_A)).coerceIn(0f, 1f)
         val target = max(mw, ma).pow(GAMMA)
         val tau = if (target > motion) ATTACK else RELEASE

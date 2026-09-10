@@ -9,6 +9,7 @@ import com.x3knockout.SettingsStore
 import com.x3knockout.engine.Boxer
 import com.x3knockout.engine.Clock
 import com.x3knockout.engine.Fight
+import com.x3knockout.engine.Fighter
 import com.x3knockout.engine.Hand
 import com.x3knockout.engine.Level
 import com.x3knockout.engine.SpriteMaterial
@@ -134,6 +135,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     private var pHead = -1; private var pTorso = -1; private var pHatchTorso = -1
     private var pGloveL = -1; private var pGloveR = -1; private var pHatchGloveL = -1; private var pHatchGloveR = -1
     private var pPupilL = -1; private var pPupilR = -1; private var pEyes = -1
+    /** The low guard's three parts: the two forearms and the trunks' hatch (see [lowGuardTint]). */
+    private var pFarmL = -1; private var pFarmR = -1; private var pHatchTrunks = -1
     private var pSweat = -1; private var pSpirals = -1; private var pTongue = -1; private var pTeeth = -1
     private val pCrest = IntArray(5) { -1 }
     private val pMouth = IntArray(5) { -1 }
@@ -599,6 +602,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         pHead = set.part("head"); pTorso = set.part("torso"); pHatchTorso = set.part("hatch_torso")
         pGloveL = set.part("glove_L"); pGloveR = set.part("glove_R"); pHatchGloveL = set.part("hatch_glove_L"); pHatchGloveR = set.part("hatch_glove_R")
         pPupilL = set.part("pupil_L"); pPupilR = set.part("pupil_R"); pEyes = set.part("eyes")
+        pFarmL = set.part("farm_L"); pFarmR = set.part("farm_R"); pHatchTrunks = set.part("hatch_trunks")
         pSweat = set.part("sweat"); pSpirals = set.part("spirals"); pTongue = set.part("tongue"); pTeeth = set.part("teeth")
         for (k in 0 until 5) pCrest[k] = set.part("crest_$k")
         val mouths = arrayOf("mouth_grin", "mouth_flat", "mouth_o", "mouth_grimace", "mouth_crow")
@@ -800,8 +804,15 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         if (!f.colourTells) {
             for (k in 0 until 5) material.gain(pCrest[k], 0f)
             material.gain(pPupilL, 0f); material.gain(pPupilR, 0f)
+            // NOT A `return` ANY MORE, and that was a real bug: the impact white lives at the
+            // bottom of this function, so bailing out here meant NOTHING lit up when a punch
+            // landed on Silk. His rule is that HIS TELEGRAPHS have no colour channel — no crest,
+            // no pupil, no white glove — not that the player gets no feedback for hitting him.
+            lowGuardTint(b, f, gain)
+            impactWhite(gain)
             return
         }
+        lowGuardTint(b, f, gain)
         // the crest: VIOLET at rest, GOLD for a hook, WHITE for the uppercut, AMBER and dim when he waits you out; a spike lost per knockdown
         val crestRgb = when (b.crest) { Boxer.Crest.VIOLET -> VIOLET; Boxer.Crest.GOLD, Boxer.Crest.GOLD_DROOP -> GOLD; Boxer.Crest.WHITE -> WHITE; Boxer.Crest.AMBER -> AMBER }
         val crestGain = gain * (if (b.crest == Boxer.Crest.AMBER) 0.6f else if (b.crest == Boxer.Crest.WHITE) 1.3f else 1f) * (if (b.sparksT > 0f) 0.3f else 1f)
@@ -818,9 +829,39 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             material.set(g, mixR(RED, WHITE, flashRamp), mixG(RED, WHITE, flashRamp), mixB(RED, WHITE, flashRamp), (1f + (if (b.extend) 0.6f else 0.5f) * flashRamp) * gain)
             material.gain(hg, (HATCH_BLOCK + (1f - HATCH_BLOCK) * flashRamp) * gain)
         }
-        // the impact frame's white, two frames, over everything
+        impactWhite(gain)
+    }
+
+    /** The impact frame's white, two frames, over everything — including on the man who shows nothing. */
+    private fun impactWhite(gain: Float) {
         if (headFlashFrames > 0) material.set(pHead, WHITE, 1.5f * gain)
         if (bodyFlashFrames > 0) { material.set(pTorso, WHITE, 1.5f * gain); material.set(pHatchTorso, WHITE, 0.8f * gain) }
+    }
+
+    /**
+     * HIS ELBOWS, DRAWN (`Boxer.TUCK_BODY`). While the low guard is in, the two forearms and the
+     * trunks' hatch come UP a step; when it goes, they drop back. That is the only cue there is
+     * for the lane the player is about to throw into, and `Boxer.lowOpen` deliberately leads the
+     * rule by `TUCK_SET_T`, so the picture says THROW NOW rather than THROW A MOMENT AGO.
+     *
+     * WHY THE COLOUR IS MIXED TOWARD WHITE. Hue alone is a weak signal at 2.6 m on an additive
+     * renderer: the Rooster's gloves are RED on a MAGENTA body and the Anvil's are GOLD on
+     * ORANGE, so "the forearms went glove-coloured" is nearly invisible on two of the five. The
+     * 0.35 white mix buys a LUMINANCE step instead, which works for every palette on the card.
+     *
+     * Silk is the exception and it is his character: this is called from inside his early-out
+     * with everything else zeroed, so his elbows are exactly as unreadable as his eyes. The
+     * information is still there in the pose; he simply will not hand it to you in light.
+     */
+    private fun lowGuardTint(b: Boxer, f: Fighter, gain: Float) {
+        if (b.lowOpen || !f.colourTells) return
+        val g = f.glove
+        val r = g[0] + (WHITE[0] - g[0]) * LOW_MIX
+        val gr = g[1] + (WHITE[1] - g[1]) * LOW_MIX
+        val bl = g[2] + (WHITE[2] - g[2]) * LOW_MIX
+        material.set(pFarmL, r, gr, bl, LOW_GAIN * gain)
+        material.set(pFarmR, r, gr, bl, LOW_GAIN * gain)
+        material.gain(pHatchTrunks, HATCH_BLOCK * LOW_HATCH_K * gain)
     }
 
     private fun mixR(a: FloatArray, b: FloatArray, k: Float) = a[0] + (b[0] - a[0]) * k
@@ -1362,6 +1403,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
          * the cross-hatch you can still see inside the glove and across the jaw at 2 m, gone by
          * the time the fill is all that is left of him at 4.
          */
+        /** The low guard's cue: how far the forearms mix toward white, their gain, and the hatch's step. */
+        const val LOW_MIX = 0.35f
+        const val LOW_GAIN = 1.4f
+        const val LOW_HATCH_K = 1.6f
         const val HATCH_SKIN = 0.20f
         const val HATCH_BLOCK = 0.30f
         /** DETAIL parts' LOD hysteresis (§12.7): off beyond 3.4 m, on inside 3.0 m. */

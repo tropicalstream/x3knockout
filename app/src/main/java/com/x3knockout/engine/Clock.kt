@@ -61,7 +61,23 @@ class Clock {
     companion object {
         // ---------------------------------------------------------------- the map (MOTION.md)
         /** Angular speed below which the clock stays at its floor, rad/s: rest noise and breathing buy nothing. */
-        const val DEAD_W = 0.08f
+        const val DEAD_W = 0.12f
+        /**
+         * WHAT A LOOK COSTS, as a fraction of what a dodge of the same head speed costs
+         * (LAW.md §1.3). See [omegaEff] — the whole argument is there.
+         */
+        const val K_YAW = 0.15f
+
+        /**
+         * THE AXIS SPLIT: the one angular rate the clock is allowed to charge (LAW.md §1.3), and
+         * see the note on [target] for the arithmetic. `wx` is pitch (the duck), `wy` yaw (the
+         * look), `wz` roll (the slip). Yaw is priced at [K_YAW]; the other two, which ARE the
+         * dodge collider, at full weight.
+         */
+        fun omegaEff(wx: Float, wy: Float, wz: Float): Float {
+            val ky = wy * K_YAW
+            return kotlin.math.sqrt(wx * wx + ky * ky + wz * wz)
+        }
         /** Linear acceleration dead band, m/s². */
         const val DEAD_A = 0.25f
         /** Body acceleration that counts as fully moving, m/s². A brisk step peaks at 3–5. */
@@ -503,6 +519,25 @@ class Clock {
      * pins the MOTION.md ruling in `ClockTest` (an ordinary 42.6°/s scan reads 0.20 under Set B
      * and 0.53 under Set A) without a sensor or a head in the loop. Whichever of the two is
      * edited, the other must follow.
+     */
+    /**
+     * THE AXIS SPLIT: the one angular rate the clock is allowed to charge (LAW.md §1.3).
+     *
+     * `sqrt(wx² + wy² + wz²)` cannot tell "I slipped my head off the line of that punch" from
+     * "I turned to look at the man", and it charged the same for both. That was survivable while
+     * the opponent stood on one spot; it is not survivable now that he has feet, because a man
+     * who circles MAKES the player turn their head and a raw-magnitude clock then bills them for
+     * it. On the shipping constants, tracking the Sardine's dart would charge rate 0.123 against
+     * a floor of 0.03, and tracking the Metronome 0.437 — fourteen times the floor, paid
+     * continuously, for keeping the man who is punching you in frame. The mechanic upside down.
+     *
+     * So: yaw ([wy]) is LOOKING, at [K_YAW]; pitch ([wx], the duck) and roll ([wz], the slip) are
+     * DODGING, at full weight, because those two ARE the dodge collider. An ordinary 42.6°/s scan
+     * (MOTION.md "The knee", measured on the owner) lands at 0.111 rad/s — under [DEAD_W], so it
+     * is free — while the same 42.6°/s spent as a slip costs the whole of it. Same head speed,
+     * two different meanings, correctly priced. A 300°/s panic whip still costs rate 0.20.
+     *
+     * `MotionTracker` calls this per gyro sample; `ClockTest` pins it without a head.
      */
     fun target(angSpeed: Float, accelMag: Float): Float {
         val mw = ((angSpeed - DEAD_W) / (wRef - DEAD_W)).coerceIn(0f, 1f)

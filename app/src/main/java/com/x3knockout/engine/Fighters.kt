@@ -66,6 +66,18 @@ class Fighter(
     val hangMul: Float = 1f,
     /** How long his guard stays open when you earn it. Below 1 means the openings are stingier. */
     val openMul: Float = 1f,
+    /**
+     * HOW GOOD HIS ELBOWS ARE — a multiplier on [Boxer.TUCK_BODY], applied on top of [openMul]
+     * inside the single `tuck()` helper. Below 1 means his ribs come back sooner than his chin
+     * does, which makes downstairs his hole; above 1 means the opposite.
+     */
+    val lowMul: Float = 1f,
+    /**
+     * HOW MANY HEAD PUNCHES BRING HIS ELBOWS OUT. This, and not [lowMul], is what keeps the five
+     * men apart: untucking is a CLEAR rather than a decrement, so a long tuck alone is defeated
+     * by one punch to the chin whatever its length. The Anvil wants two, and that is his wall.
+     */
+    val lowBlows: Int = 1,
     /** The round his feints begin (1 = from the first bell). */
     val feintsFromRound: Int = 2,
     /** His gimmick — see [Gimmick]. */
@@ -422,6 +434,7 @@ class Fighter(
         /** #1 — the grammar. Unchanged: every number is the one the owner has already played. */
         val ROOSTER = Fighter(
             id = "rooster", name = "THE ROOSTER", billing = "ROY RUDD - THE STRUTTING CHAMPION OF NOWHERE",
+            lowMul = 1.00f,
             rank = 4, story = "WIN AND YOU ARE RANKED. LOSE AND YOU GO HOME UNKNOWN.",
             asset = "boxer", hp = intArrayOf(100, 120, 140),
             roundNames = arrayOf("THE STRUT", "THE RUFFLE", "THE COCKFIGHT"),
@@ -431,6 +444,7 @@ class Fighter(
 
         val SARDINE = Fighter(
             id = "sardine", name = "THE SARDINE", billing = "SAL MARINO - NEVER THROWS JUST ONE",
+            lowMul = 0.60f,
             rank = 3, story = "THEY SAY YOU GOT LUCKY ONCE. SAL THROWS UNTIL THEY BELIEVE IT.",
             asset = "boxer_sardine", hp = intArrayOf(110, 130, 150),
             tellMul = 0.78f, strikeMul = 0.92f, recoverMul = 0.85f, dmgMul = 0.7f,
@@ -445,6 +459,7 @@ class Fighter(
 
         val ANVIL = Fighter(
             id = "anvil", name = "THE ANVIL", billing = "DUKE ODELL - HE WAITS FOR YOU TO SWING",
+            lowMul = 1.60f, lowBlows = 2,
             rank = 2, story = "NOBODY GOES THROUGH DUKE ODELL. THEY GO AROUND HIM.",
             asset = "boxer_anvil", hp = intArrayOf(150, 180, 210),
             tellMul = 1.25f, strikeMul = 1.0f, recoverMul = 1.15f, dmgMul = 1.7f,
@@ -459,6 +474,7 @@ class Fighter(
 
         val SILK = Fighter(
             id = "silk", name = "SILK", billing = "SORENSEN - NOTHING SHOWS ON HIM",
+            lowMul = 1.00f,
             rank = 1, story = "ONE MAN BETWEEN YOU AND THE TITLE. NOTHING SHOWS ON HIM.",
             asset = "boxer_silk", hp = intArrayOf(120, 145, 170),
             tellMul = 0.88f, strikeMul = 0.95f, recoverMul = 0.9f, dmgMul = 1.1f,
@@ -473,6 +489,7 @@ class Fighter(
 
         val METRONOME = Fighter(
             id = "metronome", name = "THE METRONOME", billing = "MAX VOSS - HE KEEPS YOUR TIME",
+            lowMul = 1.15f,
             rank = 0, story = "TWELVE YEARS. NOBODY HAS TAKEN A ROUND OFF HIM.",
             asset = "boxer_metronome", hp = intArrayOf(140, 170, 200),
             tellMul = 1.0f, strikeMul = 1.0f, recoverMul = 0.85f, dmgMul = 1.4f,

@@ -165,6 +165,24 @@ class ClockTest {
     }
 
     @Test
+    fun lookingIsFreeAndDodgingIsNot() {
+        // LAW.md 1.3, and the prerequisite for footwork: a man who circles MAKES the player turn
+        // their head, and a clock charged on the raw gyro magnitude then bills them for it.
+        val c = Clock()
+        val scan = Math.toRadians(42.6).toFloat()          // MOTION.md's measured p75, on the owner
+        val yaw = Clock.omegaEff(0f, scan, 0f)
+        val slip = Clock.omegaEff(0f, 0f, scan)
+        val duck = Clock.omegaEff(scan, 0f, 0f)
+        assertTrue("an ordinary look is under the dead band: it is free", yaw < Clock.DEAD_W)
+        assertEquals("the same head speed spent as a slip costs the whole of it", scan, slip, 1e-6f)
+        assertEquals("...and as a duck likewise", scan, duck, 1e-6f)
+        assertEquals("free means free", 0f, c.target(yaw, 0f), 1e-6f)
+        assertTrue("a slip of the same speed is not free", c.target(slip, 0f) > 0.1f)
+        val whip = Math.toRadians(300.0).toFloat()
+        assertTrue("but attention cannot be teleported for nothing", c.target(Clock.omegaEff(0f, whip, 0f), 0f) > 0.1f)
+    }
+
+    @Test
     fun resetRoundClearsTheOverrideAndTheTimers() {
         val c = Clock(); c.difficulty = 1
         c.floorOverride = 0.6f; c.forceCount(); c.forceHitstop(200)
