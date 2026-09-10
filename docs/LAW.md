@@ -1,5 +1,13 @@
 # THE TIME LAW — the authority
 
+> # ⚠ SUPERSEDED 2026-09-10 — THE LAW IS REMOVED
+>
+> The owner: *"remove the superhotvr mechanic - players just always move."* The world runs at 1.0.
+> Nothing in this document is in force; every constant it rules on is either deleted or pinned.
+> It is kept as the record of a design that shipped, was measured on a real head, and was then
+> taken out on purpose — and because the build it governs is tagged `superhot-final`.
+
+
 > **BUILD STATUS 2026-09-10.** §1.2 is **shipped**: one floor for the whole game, `Clock.FLOOR_STILL
 > = 0.03`, difficulty-independent, and `Boxer.floorNow()` is now two lines (−1 through a knockdown,
 > the floor everywhere else). Measured on the glasses that afternoon a still player mid-round reads

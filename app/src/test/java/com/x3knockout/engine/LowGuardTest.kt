@@ -29,7 +29,6 @@ class LowGuardTest {
         override fun onTell(attack: Boxer.Attack, feint: Boxer.Feint?, tellT: Float) {}
         override fun onStrikeStart(attack: Boxer.Attack, strikeT: Float) {}
         override fun onStrike(attack: Boxer.Attack, answer: Answer, result: StrikeResult, dmg: Int) {}
-        override fun onFuseBurned(attack: Boxer.Attack) {}
         override fun onRecover(attack: Boxer.Attack) {}
         override fun onGuard(open: Boolean, by: String) {}
         override fun onLowGuard(open: Boolean, by: String) { lows.add((if (open) "out:" else "in:") + by) }
@@ -50,7 +49,6 @@ class LowGuardTest {
         val b = Boxer()
         b.listener = rec
         b.fighter = who
-        b.hangT = Boxer.HANG_T[1]
         b.newFight(seed = 7, difficulty = 1)
         b.newRound(round)
         b.drill = Boxer.Drill.PECK_L      // he never throws: the test owns the tempo

@@ -317,11 +317,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val title = fight.state == State.TITLE
         // the crowd: the wave's amplitude and alpha from the crowd meter (the lagged rate); the ovation at 0.2 / 0.6
         val crowdAmp = if (ovation) 0.20f else 0.02f + 0.10f * crowdLevel
-        val crowdK = if (title) 0.25f else if (ovation) 0.60f else 0.25f + 0.35f * crowdLevel
+        val crowdK = if (title) 0.13f else if (ovation) 0.60f else 0.25f + 0.35f * crowdLevel
         val bounce = if (ovation) 0.05f else 0f
         // the ring: the knockdown's shake (a decaying impulse computed here, spatial phase only), the multiplier's glow, the clapper's pulse
         val ringAmp = if (ropeShakeT in 0f..RING_SHAKE_T) 0.05f * exp(-ropeShakeT / 0.12f) * cos(ropeShakeT * 2f * PI.toFloat() * 9f) else 0f
-        var ringGlow = 1f + (fight.multiplier - 1).coerceIn(0, 3) / 3f * 0.667f
+        var ringGlow = if (title) 0.42f else 1f + (fight.multiplier - 1).coerceIn(0, 3) / 3f * 0.667f
         if (fight.state == State.FIGHT && fight.roundClock <= Fight.CLAPPER_FROM_S) ringGlow *= 0.85f + 0.15f * (0.5f + 0.5f * sin(fight.t * 2f * 2f * PI.toFloat()))
         for (e in 0 until eyes) {
             GLES30.glViewport(e * vw, 0, vw, height)
@@ -593,7 +593,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             (fight.boxer.footZ - camZ) * (fight.boxer.footZ - camZ)).coerceAtLeast(0.3f)
         val kk = KICK_PX_M * (kd / Boxer.REST_RANGE)
         kickWx = fight.kickX * kk; kickWy = fight.kickY * kk
-        if (fight.state == State.TITLE) { boxerScene(dim = 0.55f); refereeScene(dt); return }
+        // THE ATTRACT IS BEHIND THE START MENU NOW, so it goes down to a third: the ring and the
+        // boxer are the wallpaper of a screen whose job is to be read, and on an additive display
+        // "behind" is a brightness and nothing else — there is no depth to hide it with.
+        if (fight.state == State.TITLE) { boxerScene(dim = TITLE_DIM); refereeScene(dt); return }
         boxerScene(dim = 1f)
         sampleTrails(fight.clock.wdt)
         telegraphScene()
@@ -654,8 +657,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val gain = dim * fightDim * koDim
         // WHERE HE IS STANDING, which is a variable now (DESIGN.md §6.2). Everything downstream —
         // walkFrame, emitSeg, the batches, uMVP — follows for free.
-        place.x = b.footX; place.z = b.footZ
-        bxW = b.footX; bzW = b.footZ
+        // ON THE TITLE HE STANDS OFF TO ONE SIDE. The start menu owns the centre column now, and
+        // a man in the middle of it is a man behind the word SETTINGS. He has feet as of this
+        // week, so the attract screen simply uses them: he warms up in the right third of the
+        // ring, which is where a fighter waiting to be introduced actually stands.
+        val shift = if (fight.state == State.TITLE) TITLE_SHIFT_X else 0f
+        place.x = b.footX + shift; place.z = b.footZ
+        bxW = place.x; bzW = place.z
         // HOW HE WAITS — the channel that tells the five men apart before either of them moves.
         // The Sardine jitters, the Anvil heaves, Silk shifts his weight and shows nothing, the
         // Metronome ticks. Same 196 frames underneath all of it; four multipliers on top.
@@ -665,7 +673,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // every frame since the first prototype and nothing has ever read it; an atan2 to a man
         // who is himself translating snaps, and the ease is 0.15 s of REAL time so a frozen world
         // still lets him turn to face a leaning player rather than reading as a cardboard cut-out.
-        place.yaw = b.yaw
+        // …and he faces the camera from WHERE HE IS DRAWN. His own eased heading is computed from
+        // his real position, which is the mark on the title; billboarding a man who has been
+        // shifted 1.45 m for the sake of the menu with a heading meant for the centre of the ring
+        // foreshortens him into a sliver, which is exactly what it did the first time.
+        place.yaw = if (shift != 0f) set.headingTo(place.x, place.z, camX, camZ) else b.yaw
         place.roll = 0.035f * fr.swayAmp * sin(wt * 1.3f * fr.swayHz)
         place.pitch = 0f
         place.scale = fr.stature
@@ -1229,7 +1241,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // The REFLEX rail drains through the STRIKE as well as the tell: under the owner's ruling
         // the glove in flight travels on world time and the hang and the fuse go on burning
         // (Boxer.update), so the read the rail measures includes the glove.
-        m.reflex = if (b.phase == Boxer.Phase.TELL || b.phase == Boxer.Phase.STRIKE) ((b.hangLeft + b.fuseLeft) / (b.hangT + Boxer.FUSE_T)).coerceIn(0f, 1f) else -1f
+        // THE READ, LEFT — the tell's own fraction now. It used to be the hang and the fuse
+        // draining, which measured the same thing under the old law and measures nothing under
+        // this one; the tell IS the window between the glove lighting and the punch arriving, so
+        // the rail counts that down directly and is honest for the first time.
+        m.reflex = if (b.phase == Boxer.Phase.TELL && b.tellDur > 0f) (1f - b.tellFrac).coerceIn(0f, 1f) else -1f
         // WHOSE NAME IS ON THE BOARD. It was a constant, so every man on the card was announced as
         // the Rooster — the kind of defect that is invisible while there is only one opponent and
         // absurd the moment there are five.
@@ -1240,6 +1256,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         m.riseHead = fight.riseHead; m.riseLine = fight.riseLine; m.riseNext = fight.riseNext
         m.riseChampion = fight.riseChampion
         m.titleWho = fight.titleWho
+        m.titleItems = fight.titleItems; m.titleSel = fight.titleSel
         m.introRank = Fight.rankWord(fight.fighter.rank)
         m.introStory = fight.fighter.story
         m.yourHp = f.hp / Fight.HP_MAX.toFloat(); m.yourKd = f.knockdownsYouRound
@@ -1272,7 +1289,9 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         m.feedback = f.feedback; m.feedbackT = f.feedbackT; m.priorityText = f.priorityText
         m.impactWord = f.impactWord; m.impactT = f.impactT
         m.starburstT = f.starburstT
-        m.brackets = ((0.15f - f.clock.timeScale) / 0.15f).coerceIn(0f, 1f)
+        // the panel brackets: the two moments the world still stops, and nothing else
+        m.brackets = if (f.clock.forced == Clock.Forced.HITSTOP) 1f
+            else ((0.35f - f.clock.timeScale) / 0.35f).coerceIn(0f, 1f)
         m.damageFlash = f.damageFlash; m.stunJitter = f.stunJitterT; m.kickX = f.kickX; m.kickY = f.kickY
         m.countN = f.countN; m.countPop = f.countPopT; m.countYou = f.downWho == Who.YOU
         m.roundCard = "ROUND ${f.round}"; m.roundCardName = f.roundName
@@ -1323,8 +1342,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         labRows.add("PAD L" to "${(now - f.lastLeftLiftMs).coerceAtMost(9999)}")
         labRows.add("PAD R" to "${(now - f.lastRightLiftMs).coerceAtMost(9999)}")
         labRows.add("PAIR" to "${f.lastPairMs}")
-        labRows.add("HANG" to "%.2f".format(Locale.US, b.hangLeft))
-        labRows.add("FUSE" to "%.2f".format(Locale.US, b.fuseLeft))
+        labRows.add("TELL" to "%.2f".format(Locale.US, b.tellDur))
         labRows.add("STRIP" to "${b.strip.name}:${b.strip.local}")
         labRows.add("FORCED" to c.forced.name)
         labRows.add("HP" to "${f.hp} / ${b.hp}")
@@ -1465,6 +1483,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
          * the time the fill is all that is left of him at 4.
          */
         /** The low guard's cue: how far the forearms mix toward white, their gain, and the hatch's step. */
+        /** The attract's brightness behind the start menu: wallpaper, not a fight. */
+        const val TITLE_DIM = 0.30f
+        /** …and off to one side of it, so the start menu has the centre column to itself. */
+        const val TITLE_SHIFT_X = 1.45f
         const val LOW_MIX = 0.35f
         const val LOW_GAIN = 1.4f
         const val LOW_HATCH_K = 1.6f

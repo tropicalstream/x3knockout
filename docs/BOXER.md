@@ -5,6 +5,10 @@
 > the SUPERHOT VR mechanic is the game, and it does not get an exception for the moment that matters.
 > Columns headed `(real)` in the first draft now read `(world)`.
 
+> **SUPERSEDED 2026-09-10 (later the same day) — THE TIME LAW IS GONE ENTIRELY.** The world runs
+> at 1.0; there is no floor, no hang and no fuse, and every "world second" below is now just a
+> second. See DESIGN.md's header. The note that follows is the record of the step before it.
+>
 > **AMENDED 2026-09-10 — ONE FLOOR, and what of `docs/LAW.md` is actually built.** `FLOOR_IDLE`
 > (0.35), `FLOOR_FUSE_TOP` (0.60), `FLOOR_OPEN` (0.12) and the per-difficulty `FLOOR_DEEP` array
 > are **deleted**. `floorNow()` survives as four words — a knockdown returns −1 so the fight can

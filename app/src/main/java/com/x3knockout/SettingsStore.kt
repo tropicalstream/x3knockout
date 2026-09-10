@@ -186,6 +186,15 @@ class SettingsStore(context: Context) {
      * every device that has one loses it and has to beat the card; that is the honest way round,
      * because the alternative is a title nobody in this build ever won.
      */
+    /**
+     * A LOSS PUTS YOU BACK AT THE BOTTOM OF THE CARD (the owner, 2026-09-10: *"whenever player
+     * loses, they restart from beginning of game"*). [boutReached]'s setter is deliberately
+     * MONOTONIC — it silently drops any write that is not an increase, which is what makes it a
+     * record of what you can beat — so a reset cannot go through it and needs its own door.
+     * The belt is NOT cleared: winning it once happened, and a later loss does not unhappen it.
+     */
+    fun resetCareer() { p.edit().putInt("bout", 0).apply() }
+
     fun healStory(version: Int) {
         if (story.getInt("storyV", 0) >= version) return
         story.edit().putBoolean("champion", false).putInt("storyV", version).apply()

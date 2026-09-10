@@ -172,6 +172,9 @@ class Hud(private val out: Sink) {
         const val MARQUEE = "WASHINGTON D.C. - FIVE FIGHTS TO THE TITLE"
         /** Under the traced name, on the title only: the man whose card this is. */
         val P_WHO = floatArrayOf(320f, 196f); const val SC_WHO = 2.0f
+        /** The start screen's menu: three rows under the name, and how to work it. */
+        val P_START = floatArrayOf(320f, 236f); const val SC_START = 2.4f; const val START_ROW = 27f
+        const val START_HINT = "SWIPE THE RIGHT TEMPLE TO CHOOSE - TAP TO SELECT"
         val P_SUBTITLE = floatArrayOf(320f, 195f); const val SC_SUBTITLE = 1.8f
         // The subtitle is gone at the owner's word. A title screen that explains its own mechanic
         // in a sentence is a title screen that does not trust the mechanic; the marquee and the
@@ -261,6 +264,9 @@ class Hud(private val out: Sink) {
         var riseChampion = false
         /** The title's one story row: who the player is and where the card left him. */
         var titleWho = ""
+        /** The start screen's three rows and which one is lit (see [startMenu]). */
+        var titleItems: List<String> = listOf("START", "SETTINGS", "CREDITS")
+        var titleSel = 0
         var hisHp = 1f
         var hisKd = 0
         var yourName = "YOU"
@@ -472,31 +478,18 @@ class Hud(private val out: Sink) {
     private fun railY(v: Float) = RAIL_BOT - (RAIL_BOT - RAIL_TOP) * v.coerceIn(0f, 1f)
 
     /**
-     * THE PULSE (x3discs' rail, kept stroke for stroke): a fill from the bottom equal to the
-     * rate, cyan at the floor climbing to a white-hot core at 1.0, a tick at the floor and the 2 px
-     * latency marker at 0.5. The heat is normalised against the SPENDABLE range `(rate − floor) /
-     * (1 − floor)`, so standing still is exactly cyan on every floor the boxer hands the clock.
+     * THE LEFT RAIL IS GONE, and it was the most visible casualty of removing the time law: it
+     * WAS the time scale, a fill from the bottom equal to the world's rate, cyan at the floor
+     * climbing white-hot at 1.0, with the floor's own tick beside it. With the rate pinned at
+     * 1.0 it would have been a full bar that never moved — an instrument reading a constant,
+     * which is worse than no instrument, because the player would keep looking at it.
+     *
+     * All that survives is STILL, which is not about time: it is the stall detector, and it
+     * still means what it always meant — you are not moving and the crowd is about to notice.
      */
     private fun pulse(m: Model) {
-        val rate = m.rate.coerceIn(0f, 1f)
-        val fillY = railY(rate); val floorY = railY(m.floor); val hw = RAIL_CAP_R
-        color(m.tint, 0.38f)
-        hl(RAIL_L_X - hw, RAIL_TOP, RAIL_L_X - hw, RAIL_BOT); hl(RAIL_L_X + hw, RAIL_TOP, RAIL_L_X + hw, RAIL_BOT)
-        circle(RAIL_L_X, RAIL_TOP, RAIL_CAP_R, 12); circle(RAIL_L_X, RAIL_BOT, RAIL_CAP_R, 12)
-        val heat = ((rate - m.floor) / (1f - m.floor).coerceAtLeast(1e-3f)).coerceIn(0f, 1f)
-        val k = heat.pow(0.7f)
-        mix(CYAN, WHITE, k, 0.62f + 0.78f * k)
-        var c = -hw + 1f
-        while (c <= hw - 1f) { hl(RAIL_L_X + c, fillY, RAIL_L_X + c, RAIL_BOT); c += 1f }
-        mix(CYAN, WHITE, (k + 0.35f).coerceAtMost(1f), 0.9f + 0.5f * k)
-        hl(RAIL_L_X - hw - 2f, fillY, RAIL_L_X + hw + 2f, fillY)
-        color(CYAN, 0.75f); hl(RAIL_L_X - hw - 6f, floorY, RAIL_L_X + hw + 6f, floorY)
-        color(m.tint, 0.45f)
-        hl(RAIL_L_X - RAIL_CROSS_R, RAIL_CROSS_Y, RAIL_L_X - hw - 2f, RAIL_CROSS_Y); hl(RAIL_L_X + hw + 2f, RAIL_CROSS_Y, RAIL_L_X + RAIL_CROSS_R, RAIL_CROSS_Y)
-        color(WHITE, 0.34f + 0.96f * m.halfFlash.coerceIn(0f, 1f))
-        var t = -RAIL_HALF_TICK_W / 2f + 0.5f
-        while (t < RAIL_HALF_TICK_W / 2f) { hl(RAIL_L_X - hw, RAIL_CROSS_Y + t, RAIL_L_X + hw, RAIL_CROSS_Y + t); t += 1f }
-        if (m.still) { color(VIOLET, 0.62f); text("STILL", RAIL_L_X + RAIL_CAP_R + 9f, 360f, 1.2f) }
+        if (!m.still) return
+        color(VIOLET, 0.62f); text("STILL", RAIL_L_X - 2f, 360f, 1.2f)
     }
 
     /** THE REFLEX: full RED the instant a tell begins, draining through the hang and the fuse; empty = he comes. Idle: a dim BLUE outline. */
@@ -550,7 +543,13 @@ class Hud(private val out: Sink) {
         textC("KO", (KO_BOX[0] + KO_BOX[2]) / 2f, KO_BOX[3] - 4f, SC_KO)
     }
 
-    /** The comic panel brackets at the plate's four corners, fading in as the rate falls under 0.15. */
+    /**
+     * The comic panel brackets at the plate's four corners. They faded in as the rate fell under
+     * 0.15 — the picture becoming a printed panel as the world stopped — and with the rate pinned
+     * at 1.0 that never happens any more. They are kept, driven by the hit-stop and the
+     * knockdown's slow-motion instead, which are the two moments the world still stops and the
+     * two the effect was really for.
+     */
     private fun brackets(m: Model) {
         if (m.brackets <= 0.01f) return
         color(MAGENTA, BRACKET_A * m.brackets)
@@ -748,9 +747,12 @@ class Hud(private val out: Sink) {
         else { color(DAMAGE, 0.95f); textC("GAME OVER", P_GAMEOVER[0], P_GAMEOVER[1], SC_GAMEOVER) }
         color(WHITE, 0.8f); textC("SCORE ${m.score}", P_GO_SCORE[0], P_GO_SCORE[1], 2f)
         if (m.newHigh) { color(WHITE_GOLD, blink(m.t, 1.2f, 0.55f, 1f)); textC("NEW HIGH SCORE", P_GO_HIGH[0], P_GO_HIGH[1], SC_ROUND_CARD_NAME) }
-        if (m.phaseT <= 1.2f || m.continueLeft <= 0f) return
-        if (sin(m.t * 4f) > -0.2f) { color(WHITE_GOLD, 0.95f); textC("INSERT COIN TO CONTINUE", P_COIN[0], P_COIN[1], SC_COIN) }
-        color(CYAN, 0.75f); textC("CONTINUE ${ceil(m.continueLeft).toInt()}", P_CONTINUE[0], P_CONTINUE[1], SC_CONTINUE)
+        // NO CONTINUE. A loss costs the card, not a credit (Fight.gameOver), so what used to be
+        // a nine-second countdown and an invitation to feed the machine is the one line that
+        // says what actually happened to your ranking.
+        if (m.phaseT <= 1.2f) return
+        color(WHITE, 0.75f); textC("BACK TO THE BOTTOM OF THE CARD", P_COIN[0], P_COIN[1], SC_CONTINUE)
+        if (sin(m.t * 4f) > -0.2f) { color(CYAN, 0.7f); textC("TAP TO GO AGAIN", P_CONTINUE[0], P_CONTINUE[1], SC_CONTINUE) }
     }
 
     /** THE TITLE: the marquee, the traced name, the coin, the standing warning, the two hints, the records, the credit. */
@@ -761,12 +763,37 @@ class Hud(private val out: Sink) {
         color(MAGENTA, 0.65f + 0.30f * trace); traceC(TITLE, P_TITLE[0], P_TITLE[1], SC_TITLE, trace)
         if (m.titleWho.isNotEmpty()) { color(WHITE, 0.55f); textC(m.titleWho, P_WHO[0], P_WHO[1], SC_WHO) }
         if (!m.headOn) { color(DAMAGE, 0.95f); textC(NO_HEAD, P_COIN[0], P_COIN[1], SC_COIN) }
-        else if (sin(m.t * 4f) > -0.2f) { color(WHITE_GOLD, 0.95f); textC("INSERT COIN TO PLAY", P_COIN[0], P_COIN[1], 2.4f) }
+        else startMenu(m)
         color(VIOLET, 0.6f); textC(WARNING, P_WARNING[0], P_WARNING[1], SC_SMALL)
         color(CYAN, 0.5f); textC(HINT_1, P_HINT_1[0], P_HINT_1[1], SC_SMALL); textC(HINT_2, P_HINT_2[0], P_HINT_2[1], SC_SMALL)
         color(CYAN, 0.5f); text("HIGH ${m.high}", P_RECORDS[0], P_RECORDS[1], SC_RECORDS)
         if (m.bestKo.isNotEmpty()) textR("BEST KO ${m.bestKo}", P_RECORDS[2], P_RECORDS[3], SC_RECORDS)
         color(WHITE, 0.45f); textC("CREDIT 01", P_CREDIT[0], P_CREDIT[1], SC_CREDIT)
+    }
+
+    /**
+     * THE START SCREEN'S MENU — three rows where INSERT COIN used to blink.
+     *
+     * The settings were behind a double-tap, which is the suite's convention and is also a thing
+     * a player has to be told about. They are a row now. The selected row carries a caret on both
+     * sides rather than a highlight bar, because on an additive renderer a filled bar behind text
+     * is the one shape that makes the text harder to read, and it pulses so the screen is never
+     * completely still — the marquee has to look alive from across a room.
+     */
+    private fun startMenu(m: Model) {
+        for (i in m.titleItems.indices) {
+            val y = P_START[1] + i * START_ROW
+            val on = i == m.titleSel
+            if (on) {
+                val a = 0.75f + 0.25f * blink(m.t, 1.6f, 0f, 1f)
+                color(WHITE_GOLD, a); textC(m.titleItems[i], P_START[0], y, SC_START)
+                val hw = m.titleItems[i].length * SC_START * 5f
+                textC("-", P_START[0] - hw - 14f, y, SC_START); textC("-", P_START[0] + hw + 14f, y, SC_START)
+            } else {
+                color(CYAN, 0.55f); textC(m.titleItems[i], P_START[0], y, SC_START * 0.85f)
+            }
+        }
+        color(WHITE, 0.32f); textC(START_HINT, P_START[0], P_START[1] + m.titleItems.size * START_ROW + 4f, 1.15f)
     }
 
     /** Centred text with the power-on beam: the strokes appear in drawing order as [k] runs 0 → 1. */

@@ -194,11 +194,14 @@ class Fighter(
          */
         QUIET,
         /**
-         * TEMPO — the champion. His tell and his strike do not run on the world clock's floor like
-         * everyone else's; they run on a clock the player's own motion drives, amplified by
-         * [Fighter.gimmickK]. Stand still and he is slower than the Rooster. Move — dodge, punch,
-         * even look about — and he is faster than the Sardine. He is the game explaining itself:
-         * every verb you have costs time, and against him time is the opponent.
+         * TEMPO — the champion, and the one gimmick the time law's removal rewrote rather than
+         * killed. It used to be his CLOCK: his tell and his strike ran on the player's own motion
+         * amplified, so a still player faced a crawling champion and a moving one faced the
+         * fastest man on the card. With the world at a flat 1.0 that would have run him at a
+         * tenth speed against anybody who stood still, so it is his FEET now — three quarters of
+         * his lateral target is the player's own displacement, eased, and the ring you thought
+         * you were taking closes behind you. The idea survives in the one channel that still has
+         * room for it (see `Boxer.feet`). [gimmickK] is no longer read for him.
          */
         TEMPO,
     }

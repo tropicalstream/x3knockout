@@ -35,7 +35,6 @@ class FootworkTest {
     private fun boxer(who: Fighter, round: Int = 1): Boxer {
         val b = Boxer()
         b.fighter = who
-        b.hangT = Boxer.HANG_T[1]
         b.newFight(seed = 7, difficulty = 1)
         b.newRound(round)
         b.drill = Boxer.Drill.OFF

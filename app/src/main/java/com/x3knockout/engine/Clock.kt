@@ -230,9 +230,14 @@ class Clock {
     val baseFloor: Float
         get() = if (labFloor in LAB_FLOORS.indices) LAB_FLOORS[labFloor] else FLOOR_STILL
 
-    /** The floor the world creeps at when the player is perfectly still, override first. */
-    val floor: Float
-        get() = if (floorOverride >= 0f) floorOverride.coerceIn(0f, 1f) else baseFloor
+    /**
+     * THE FLOOR IS 1.0 AND SO IS EVERYTHING ELSE. It used to be the fraction of real time the
+     * world crept at when the player was perfectly still; there is no such fraction any more.
+     * Kept as a property rather than deleted because the rail, the `CLK` line and
+     * `Boxer.verifyLine` all print it, and a telemetry line that lies is worse than one that
+     * repeats itself.
+     */
+    val floor: Float get() = 1f
 
     // ------------------------------------------------------------------ this frame
     /** How fast the world ran this frame, 0..1. The left rail IS this number. */
@@ -473,7 +478,19 @@ class Clock {
             Forced.COUNT -> 0f                                         // the referee is outside the bubble
             Forced.STEP, Forced.CORNER, Forced.PUNCH, Forced.STRIKE -> 1f   // not the body's to spend
             Forced.SLOW -> slowRate                                    // the fall, watched
-            Forced.NONE -> floor + (1f - floor) * m                    // the law
+            // THE LAW IS GONE (the owner, 2026-09-10: "remove the superhotvr mechanic - players
+            // just always move"). This line WAS the game: `floor + (1 - floor) * m`, the world
+            // advancing only as fast as the body did. It is 1.0 now, unconditionally, and the
+            // fight runs in real time like the cabinet it is a homage to.
+            //
+            // WHAT IS DELIBERATELY LEFT ALIVE ABOVE IT, because none of it was the time law:
+            // MENU (a pause), HITSTOP (the impact frame), COUNT (the referee is outside the
+            // fight) and SLOW (the knockdown, watched). Those are staging and juice; they stop
+            // the world for a reason the player can see, which is the opposite of a tax on
+            // standing still. [motion], [act], [m] and the whole knee are still COMPUTED — the
+            // stall detector, the rails and the telemetry read them — they simply no longer
+            // decide how fast anything moves.
+            Forced.NONE -> 1f
         }
         wdt = d * timeScale
         worldT += wdt

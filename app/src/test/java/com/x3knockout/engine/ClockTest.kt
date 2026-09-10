@@ -25,47 +25,63 @@ class ClockTest {
     }
 
     @Test
-    fun theFloorIsTheBoxersState() {
+    fun theWorldRunsAtOneWhateverTheBodyDoes() {
+        // THE LAW IS GONE (2026-09-10) and this is the test that keeps it gone. It used to assert
+        // the opposite of every line below: that a still body bought a 0.03 world and a moving
+        // one bought 1.0. If a motion term is ever reintroduced by accident, this goes red.
         val c = Clock(); c.difficulty = 1
         c.update(DT, 0f)
-        assertEquals("no override: the difficulty floor", Clock.FLOOR_STILL, c.timeScale, 1e-6f)
-        c.floorOverride = 0.35f
-        c.update(DT, 0f)
-        assertEquals("IDLE: he circles at 0.35 while you stand still", 0.35f, c.timeScale, 1e-6f)
+        assertEquals("a still player: full speed", 1f, c.timeScale, 1e-6f)
+        c.update(DT, 1f)
+        assertEquals("a moving player: the same full speed", 1f, c.timeScale, 1e-6f)
         c.floorOverride = 0.06f
         c.update(DT, 0f)
-        assertEquals("the hang: 0.06 the frame the tell starts", 0.06f, c.timeScale, 1e-6f)
-        c.floorOverride = -1f
-        c.update(DT, 0f)
-        assertEquals("cleared: back to the difficulty floor", Clock.FLOOR_STILL, c.timeScale, 1e-6f)
-        c.floorOverride = 0.5f
-        c.update(DT, 1f)
-        assertEquals("the override is a floor, not a ceiling: a moving body still reaches 1.0", 1f, c.timeScale, 1e-6f)
+        assertEquals("and the boxer can no longer slow it either", 1f, c.timeScale, 1e-6f)
+        for (d in 0..2) { c.difficulty = d; c.update(DT, 0f); assertEquals("difficulty $d", 1f, c.timeScale, 1e-6f) }
     }
 
     @Test
-    fun aPunchForcesTheWorldOnRealTimeThenPaysItsTail() {
-        val c = Clock(); c.difficulty = 1; c.floorOverride = 0.06f
+    fun theWorldStopsONLYForSomethingYouCanSee() {
+        // What survives the law's removal, and why: each of these stops the world for a reason
+        // that is on the glass. A pause, an impact frame, the referee counting, a man falling.
+        val c = Clock(); c.difficulty = 1
+        c.menuOpen = true; c.update(DT, 1f)
+        assertEquals("the menu is outside the fiction", 0f, c.timeScale, 1e-6f)
+        c.menuOpen = false
+        c.forceHitstop(200); c.update(DT, 1f)
+        assertEquals("the impact frame", 0f, c.timeScale, 1e-6f)
+        c.clearForced()
+        c.forceCount(); c.update(DT, 1f)
+        assertEquals("the referee is outside the fight", 0f, c.timeScale, 1e-6f)
+        c.clearForced()
+        c.forceSlow(0.1f, 2f); c.update(DT, 0f)
+        assertEquals("the fall, watched", 0.1f, c.timeScale, 1e-6f)
+        c.clearForced(); c.update(DT, 0f)
+        assertEquals("and then straight back to full speed", 1f, c.timeScale, 1e-6f)
+    }
+
+    @Test
+    fun aPunchStillRunsItsWindowOnRealTime() {
+        // The window itself outlived the law it was invented for: it is what stops a mashed tap
+        // from being a second punch, and `Fight` still reads `forcedLeft` for the mash tax.
+        val c = Clock(); c.difficulty = 1
         c.forcePunch(Clock.PUNCH_JAB_T, Clock.Verb.JAB)
         c.update(DT, 0f)
         assertEquals(Clock.Forced.PUNCH, c.forced)
-        assertEquals("rate 1.0 for the swing, however still the body", 1f, c.timeScale, 1e-6f)
+        assertEquals(1f, c.timeScale, 1e-6f)
         c.run(Clock.PUNCH_JAB_T)
         assertEquals("the window closed on real time", Clock.Forced.NONE, c.forced)
-        assertTrue("the tail: the follow-through keeps the world running above the floor", c.timeScale > 0.5f)
-        c.run(1.5f)
-        assertEquals("...and decays back to the floor", 0.06f, c.timeScale, 0.01f)
+        assertEquals("...and the world was never anywhere else", 1f, c.timeScale, 1e-6f)
     }
 
     @Test
-    fun aLandedPunchIsCutAndDropsItsTail() {
-        val c = Clock(); c.difficulty = 1; c.floorOverride = 0.06f
+    fun aLandedPunchIsCutShort() {
+        val c = Clock(); c.difficulty = 1
         c.forcePunch(Clock.PUNCH_JAB_T, Clock.Verb.JAB)
         c.run(0.10f)
         c.cutForced(0f)
         c.update(DT, 0f)
-        assertEquals("cut to the active frames", Clock.Forced.NONE, c.forced)
-        assertEquals("no tail: landing is cheaper than missing", 0.06f, c.timeScale, 1e-4f)
+        assertEquals("cut to the active frames: landing is cheaper than missing", Clock.Forced.NONE, c.forced)
     }
 
     @Test
@@ -189,6 +205,6 @@ class ClockTest {
         c.resetRound()
         c.update(DT, 0f)
         assertEquals(Clock.Forced.NONE, c.forced)
-        assertEquals(Clock.FLOOR_STILL, c.timeScale, 1e-6f)
+        assertEquals(1f, c.timeScale, 1e-6f)
     }
 }

@@ -162,11 +162,20 @@ class Boxer {
         const val DESPERATE_HP_FRAC = 0.25f
 
         // ---------------------------------------------------------------- the floor he hands the clock (DESIGN.md §2.2)
-        /** `HANG_T` by difficulty (real seconds), and the lab's ladder for the `HANG` row. */
-        val HANG_T = floatArrayOf(1.2f, 0.8f, 0.5f)
-        val HANG_LAB = floatArrayOf(0.5f, 0.8f, 1.2f)
-        /** The fuse: the ramp's length in real seconds. The most important number for "fight, not puzzle". */
-        const val FUSE_T = 1.2f
+        /**
+         * THE HANG AND THE FUSE ARE GONE with the time law they existed to bound (2026-09-10).
+         *
+         * Their whole job was the READ: under the old law a still player froze the world mid-tell
+         * and could have stood there forever, so the hang was how long that was allowed to be
+         * free and the fuse was what eventually made him commit anyway. Both ran on REAL time
+         * against a world that was not moving, and that mismatch WAS the mechanic.
+         *
+         * With the world always at 1.0 a tell simply plays and ends — the longest on the card is
+         * 1.05 s and the shortest hang was 0.5 — so neither timer could ever have been reached.
+         * They are not neutralised, they are deleted, and the reflex rail they drove now reads
+         * the tell's own fraction, which is the same information and honestly derived.
+         */
+        const val TELL_RAIL = 1f
 
         // ---------------------------------------------------------------- escalation (BOXER.md §6, DESIGN.md §5.6)
         /** Tell length multiplier by round (the strip's tell segment plays faster; the strike always at 1×). */
@@ -512,7 +521,6 @@ class Boxer {
         fun onStrikeStart(attack: Attack, strikeT: Float)
         /** The contact frame's verdict. [dmg] is already scaled by difficulty and halved for a glance; 0 for a dodge or a block. */
         fun onStrike(attack: Attack, answer: Answer, result: StrikeResult, dmg: Int)
-        fun onFuseBurned(attack: Attack)
         /** He is open: the floor drops to 0.12. */
         fun onRecover(attack: Attack)
         fun onGuard(open: Boolean, by: String)
@@ -556,8 +564,6 @@ class Boxer {
     var difficulty = 1
     /** The round, 1..3 — sets the escalation row. */
     var round = 1; private set
-    /** `HANG_T` in force, real seconds (the difficulty's, or the lab's `HANG` row). */
-    var hangT = HANG_T[1]
     var drill = Drill.OFF
     /** The strips, attached by whoever loaded them (the renderer, or a test with the files). Null = no picture, same fight. */
     val strip = StripPlayer()
@@ -589,9 +595,9 @@ class Boxer {
     val tellFrac: Float get() = if (phase == Phase.TELL && tellDur > 0f) (phaseT / tellDur).coerceIn(0f, 1f) else 0f
     val strikeFrac: Float get() = if (phase == Phase.STRIKE && strikeDur > 0f) (phaseT / strikeDur).coerceIn(0f, 1f) else 0f
     /** THE HANG and THE FUSE, real seconds left (DESIGN.md §2.2). The REFLEX rail drains on these. */
-    var hangLeft = 0f; private set
-    var fuseLeft = 0f; private set
-    var fuseBurned = false; private set
+
+
+
     /** Was the aim point INSIDE the collider at the first strike frame? PERFECT needs on-then-off. */
     var onLineAtStrike = false; private set
 
@@ -907,33 +913,27 @@ class Boxer {
         val r = if (dt.isFinite()) dt.coerceAtLeast(0f) else 0f
 
         // ---------------------------------------------------------------- THE METRONOME'S CLOCK
-        // The champion does not take the world's clock; he takes the PLAYER'S. Everyone else on the
-        // card advances on `wdt`, which the fight has already deepened to give the player their read
-        // — so a still player faces a still opponent, which is the whole promise. He is the fight
-        // where that promise is turned into the exam: his own seconds are the player's motion,
-        // amplified, so standing still makes him slower than anybody on the card and moving makes
-        // him faster than all of them.
+        // GONE WITH THE LAW IT WAS BUILT ON (2026-09-10). His gimmick WAS the time law turned
+        // into an exam: `w = r × (0.10 + 2.2 × body.moving)`, his own seconds bought with the
+        // player's motion, so standing still made him the slowest man on the card and moving
+        // made him the fastest. With the world at a flat 1.0 that line does not become
+        // pointless, it becomes BACKWARDS — it would run the champion at a tenth speed against
+        // a player who had stopped, and hand the last fight on the card to anyone who froze.
         //
-        // TEMPO_FLOOR is not zero and must never be: an opponent who literally stopped would let a
-        // motionless player win by outlasting him, and there would be no fight. It is a crawl, not
-        // a freeze — the same reasoning as the world clock's own floor.
-        //
-        // The RIGHT-hand term is what makes it fair: he reads `body.moving`, the same scalar the
-        // clock itself reads, so what accelerates him is exactly what the player can see
-        // accelerating the world on the rail. Nothing is hidden; the instrument is already on
-        // screen. Only his own timers take this clock — the guard, the stall and the flashes stay
-        // on the clocks they were on, because those are the fight's, not his.
-        if (fighter.gimmick == Fighter.Gimmick.TEMPO) {
-            w = r * (TEMPO_FLOOR + fighter.gimmickK * body.moving.coerceIn(0f, 1f))
-        }
+        // He keeps everything else that makes him the champion: the tightest openings on the
+        // card (`openMul` 0.70), the hardest damage, the most HP, three rounds of pattern, and
+        // the footwork mirror in [feet] — three quarters of his lateral target is the player's
+        // own displacement, which is the same idea as the old gimmick expressed in the one
+        // channel that still has room for it. `Gimmick.TEMPO` therefore still means something;
+        // it just means it with his feet instead of with his clock.
 
-        // real time: the hang and the fuse bound the read; the flashes belong to the plate
+        // real time: the flashes and the stall belong to the plate
         thatAllAgo += r
         headFlashT = dec(headFlashT, r); bodyFlashT = dec(bodyFlashT, r); sparksT = dec(sparksT, r)
         // THE OWNER'S RULING (BOXER.md's header): the strike travels on world time, so the read
         // includes the glove in flight — the hang and the fuse go on burning through the STRIKE,
         // and the floor they hand the clock is what brings a hanging glove to a still player.
-        if (phase == Phase.TELL || phase == Phase.STRIKE) burnHangAndFuse(r, body)
+        if (phase == Phase.TELL || phase == Phase.STRIKE) watchStillness(body)
         if (warbling) { warbleT = dec(warbleT, r); if (warbleT <= 0f) { warbleT = WARBLE_PERIOD; listener?.onSfx(Sfx.STUN_WARBLE, 1f, 0.45f) } }
         resquare(body, r)
         stall(body, w, r)
@@ -997,15 +997,12 @@ class Boxer {
 
     // ------------------------------------------------------------------ the real-time bookkeeping
 
-    private fun burnHangAndFuse(r: Float, body: Body) {
-        if (hangLeft > 0f) { hangLeft = dec(hangLeft, r); stillInFuse = false; return }
-        if (fuseLeft > 0f) {
-            fuseLeft = dec(fuseLeft, r)
-            if (fuseLeft <= 0f && !fuseBurned) { fuseBurned = true; attack?.let { listener?.onFuseBurned(it) } }
-        }
-        // he waits you out: the read is over and you are still standing there (DESIGN.md §2.2)
-        stillInFuse = body.moving < STALL_MOVING
-    }
+    /**
+     * HE IS WAITING YOU OUT. All that survives of the hang and the fuse: the crest goes amber on
+     * a peck's tell while the player stands there doing nothing, which is a character note and
+     * costs nobody any time.
+     */
+    private fun watchStillness(body: Body) { stillInFuse = body.moving < STALL_MOVING }
 
     /**
      * The billboard's heading toward the player's inferred position, eased over [RESQUARE_T] on
@@ -1426,7 +1423,7 @@ class Boxer {
         nextTellMul = 1f
         strikeDur = ((atk.strikeT + STRIKE_DELTA[round - 1]) * fighter.strikeMul).coerceAtLeast(0.1f)
         recoverDur = atk.recoverT * RECOVER_MUL[round - 1] * fighter.recoverMul
-        hangLeft = hangT * fighter.hangMul; fuseLeft = FUSE_T; fuseBurned = false; stillInFuse = false; whistled = false
+        stillInFuse = false; whistled = false
         onLineAtStrike = false
         if (atk == Attack.SUNRISE) suckerArmed = false
         placeAim(body, atk)
@@ -1989,9 +1986,9 @@ class Boxer {
 
     /** The 5 Hz `VERIFY` half that is his: state, strip:frame, HP, guard, the floor, the aim vs the capsule. */
     fun verifyLine(body: Body, floor: Float): String =
-        "VERIFY him=%s atk=%s strip=%s:%d hp=%d/%d guard=%s low=%s pos=(%+.2f,%+.2f) rng=%.2f stagger=%.2f stun=%.2f hang=%.2f fuse=%.2f floor=%.2f aim=(%+.2f,%.2f) cap=(%+.2f,%.2f..%.2f) phrase=%s".format(
+        "VERIFY him=%s atk=%s strip=%s:%d hp=%d/%d guard=%s low=%s pos=(%+.2f,%+.2f) rng=%.2f stagger=%.2f stun=%.2f floor=%.2f aim=(%+.2f,%.2f) cap=(%+.2f,%.2f..%.2f) phrase=%s".format(
             Locale.US, phase.name, attack?.name ?: "-", strip.name, strip.local, hp, hpMax, if (guardOpen) "OPEN" else "UP", if (lowOpen) "OUT" else "IN", footX, footZ, range,
-            staggerLeft, stunLeft, hangLeft, fuseLeft, floor, aimX, aimY, body.headX, body.bottom, body.top, phraseName.ifEmpty { "-" })
+            staggerLeft, stunLeft, floor, aimX, aimY, body.headX, body.bottom, body.top, phraseName.ifEmpty { "-" })
 
     // ================================================================== INTERNALS: the phase's entry, the strip, the picture
 

@@ -9,25 +9,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * THE TWO CLOCKS, PROVED ON THE REAL FIGHT (DESIGN.md §2.9, TEST.md §1: "`TwoClocksTest` —
- * DESIGN.md §2.9's list on the real engine").
+ * THE ONE CLOCK, PROVED ON THE REAL FIGHT.
  *
- * Every timer in the game is on exactly one of two lists, and §15.23 names how the split fails:
- * one hostile timer on real time silently breaks the promise the whole game rests on (his tell
- * completing while the player stands still); one caption on world time freezes the corner.
- * Neither failure is a crash, so the audit is here, on `Fight` itself — the same `Clock`, the
- * same `Boxer`, the same `update` the glasses run — driven by [Rig] with a fed body scalar and a
- * frozen floor (`--ef floor 0.0`, the desk harness's own switch), which is what makes "the world
- * did not move" a number instead of a feeling.
+ * This suite was `TwoClocksTest` and it audited the split: every timer in the game on exactly one
+ * of two lists, `wdt` for anything that could hurt you and `dt` for the plate. The owner removed
+ * the law on 2026-09-10 — *"remove the superhotvr mechanic - players just always move"* — so
+ * `wdt == dt` in every frame of an ordinary round and the split has nothing left to prove.
+ *
+ * What is still worth proving, and what these tests now assert, is the OTHER half of the same
+ * discipline: the world can still be STOPPED, by four things the player can see (the menu, the
+ * impact frame, the referee's count, a man falling), and **the plate must keep running while it
+ * is.** That was always the more fragile direction — a caption or a count that freezes with the
+ * world is a game that looks hung — and it is the half the removal did not touch.
  *
  * THE FRAMEWORK IS KEPT OUT, NOT MOCKED: `SettingsStore` wants a `Context` for two preference
  * files, and the stub `android.jar` under `isReturnDefaultValues` lets a `ContextWrapper(null)`
- * be constructed and hand back [FakePrefs] from the one method that matters. Nothing else in
- * `Fight` touches Android but `Log`, which the stub swallows.
- *
- * The one test that needs the boxer to ACT ([theHangBurnsWhileTheTellHolds]) arms itself the day
- * his interpreter throws a drilled peck; until then it returns rather than fakes, the same idiom
- * `StripSetTest` uses for the strip that is not authored yet.
+ * be constructed and hand back a fake from the one method that matters. Nothing else in `Fight`
+ * touches Android but `Log`, which the stub swallows.
  */
 class TwoClocksTest {
 
@@ -41,11 +39,11 @@ class TwoClocksTest {
         val r = Rig(); r.toFight()
         val c = r.fight.clock
         r.run(0.2f)
-        assertEquals("a frozen floor and a still body: the world does not move", 0f, c.wdt, 0f)
+        assertEquals("the world runs whatever the body does", 1f, c.timeScale, 1e-6f)
         r.fight.punch(Hand.LEFT)
         r.frame()
-        assertEquals("the punch is a forced window", Clock.Forced.PUNCH, c.forced)
-        assertEquals("...at rate 1.0 however still the body", 1f, c.timeScale, 1e-6f)
+        assertEquals("the punch is still a forced window: it is what stops a mash being a punch", Clock.Forced.PUNCH, c.forced)
+        assertEquals(1f, c.timeScale, 1e-6f)
         r.run(Fight.JAB_LAND_T + DT)
         assertEquals("a head punch on his closed idle guard is a whiff: a heart", Fight.HEARTS - 1, r.fight.hearts)
         assertEquals("the mash tax: the window was extended by the whiff", Fight.JAB_LAND_T + Clock.WHIFF_EXTEND_T, c.forcedLeft + Fight.JAB_LAND_T - (Clock.PUNCH_JAB_T - Fight.JAB_LAND_T), 0.04f)
@@ -53,31 +51,26 @@ class TwoClocksTest {
     }
 
     @Test
-    fun heartsRefillOnWorldTimeOnly() {
+    fun heartsRefillOnTheirOwn() {
+        // They refilled on WORLD time, so a still player never healed — that was the punch budget's
+        // half of the law. Now they simply refill, which is what a budget that recovers means.
         val r = Rig(); r.toFight()
         r.fight.punch(Hand.LEFT)
         r.run(Fight.JAB_LAND_T + DT)
         assertEquals(Fight.HEARTS - 1, r.fight.hearts)
-        // the punch's window, its tax and its tail buy well under a second of world time; then nothing
-        r.run(5f)
-        assertEquals("five real seconds standing still: a still player does not heal", Fight.HEARTS - 1, r.fight.hearts)
-        assertTrue("...because the world barely moved", r.fight.clock.worldT < Fight.HEART_REFILL_T)
-        r.motion = 1f
-        r.run(1.2f)
-        assertEquals("a second of world time: the heart is back", Fight.HEARTS, r.fight.hearts)
+        r.run(Fight.HEART_REFILL_T + 0.3f)
+        assertEquals("the heart comes back on its own", Fight.HEARTS, r.fight.hearts)
     }
 
     @Test
     fun theCounterWindowAndTheMeterPourAreRealTime() {
         val r = Rig(); r.toFight()
         val f = r.fight
-        val world0 = f.clock.worldT
         f.onStrike(Boxer.Attack.PECK_L, Answer.SLIP_R, StrikeResult.PERFECT, 0)
         assertTrue("PERFECT opens the counter window", f.counterWindow > 0f)
         assertEquals("PERFECT: +3 on the meter's target", Fight.METER_PERFECT, f.meter)
         val window0 = f.counterWindow
         r.run(0.3f)
-        assertEquals("the world is still frozen", world0, f.clock.worldT, 0f)
         assertEquals("the window ran on REAL time", window0 - 0.3f, f.counterWindow, 0.03f)
         assertTrue("the fill pours on REAL time (1 point per 133 ms)", f.meterShown > 1.8f && f.meterShown < 2.6f)
         r.run(1f)
@@ -86,14 +79,13 @@ class TwoClocksTest {
     }
 
     @Test
-    fun theRoundClockIsWorldTime() {
+    fun theRoundClockJustRuns() {
+        // It was 60 WORLD seconds, so a player who stood perfectly still never ran out of round.
+        // A round is a round again: three minutes of standing there is three rounds gone.
         val r = Rig(); r.toFight()
         r.run(2f)
-        assertEquals("two real seconds still: the round clock has not moved", Fight.ROUND_WORLD_S, r.fight.roundClock, 1e-4f)
-        r.motion = 1f
-        r.run(1.5f)
-        assertEquals("the round clock is 60 − worldT", Fight.ROUND_WORLD_S - r.fight.clock.worldT, r.fight.roundClock, 1e-4f)
-        assertTrue("...and a moving player spent it", r.fight.roundClock < Fight.ROUND_WORLD_S - 1f)
+        assertTrue("two real seconds: the round clock spent them", r.fight.roundClock < Fight.ROUND_WORLD_S - 1.5f)
+        assertEquals("the round clock is 60 − the clock", Fight.ROUND_WORLD_S - r.fight.clock.worldT, r.fight.roundClock, 1e-4f)
     }
 
     @Test
@@ -181,7 +173,10 @@ class TwoClocksTest {
     }
 
     @Test
-    fun theHangBurnsWhileTheTellHolds() {
+    fun aTellRunsWhateverThePlayerDoes() {
+        // The old `theHangBurnsWhileTheTellHolds`, inverted: the tell used to HOLD for a still
+        // player while a real-time hang burned underneath it. Now it runs, and this is the test
+        // that would catch the law creeping back in through the boxer rather than the clock.
         val r = Rig(); r.toFight()
         val b = r.fight.boxer
         r.motion = 1f
@@ -190,11 +185,9 @@ class TwoClocksTest {
         if (b.phase != Boxer.Phase.TELL) return   // no interpreter yet: the day he throws a drilled peck this arms itself
         r.motion = 0f
         r.frame()
-        val hang0 = b.hangLeft; val frac0 = b.tellFrac; val world0 = r.fight.clock.worldT
-        assertTrue("the hang is live at the start of a tell", hang0 > 0f)
-        r.run(0.3f)
-        assertEquals("the tell HOLDS while the player is still", frac0, b.tellFrac, 1e-5f)
-        assertEquals("...because the world did not move", world0, r.fight.clock.worldT, 1e-6f)
-        assertTrue("...but the hang BURNS on real time", b.hangLeft < hang0 - 0.2f)
+        val frac0 = b.tellFrac
+        r.run(0.2f)
+        assertTrue("the tell runs on while the player stands still", b.tellFrac > frac0 + 0.1f)
+        assertTrue("...because the world did", r.fight.clock.worldT > 0f)
     }
 }

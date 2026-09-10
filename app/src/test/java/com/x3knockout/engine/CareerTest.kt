@@ -95,6 +95,33 @@ class CareerTest {
         assertEquals("and the ladder stays where it is", 4, r.fight.boutIndex)
     }
 
+    /** Stand there and take it: the desk's own way of losing a fight. */
+    private fun loseIt(r: Desk.Rig): Boolean {
+        var guard = 0
+        while (r.fight.state != State.GAME_OVER && guard++ < 60 * 60 * 6) r.run(0.5f)
+        return r.fight.state == State.GAME_OVER
+    }
+
+    @Test
+    fun aLossPutsYouBackAtTheBottomOfTheCard() {
+        // The owner's ruling (2026-09-10): "whenever player loses, they restart from beginning of
+        // game." The arcade rule was a coin — a continue was a rematch with the same man and the
+        // ladder never moved — and it is the opposite of a climb you can be knocked off.
+        val r = Desk.Rig()
+        r.store.recordsEnabled = true
+        r.store.boutReached = 3                              // most of the way up: he has beaten three
+        r.fight.boot()                                       // …which is where boot() puts him
+        r.fight.debugStart(1, 0f, 0, null, null)
+        r.runToFight()
+        assertEquals("silk", r.fight.fighter.id)
+        assertTrue("standing still loses a fight now", loseIt(r))
+        assertEquals("the ladder is back at the bottom", 0, r.fight.boutIndex)
+        assertEquals("...and so is the record of it", 0, r.store.boutReached)
+        assertEquals("the career total is spent", 0, r.fight.careerScore)
+        assertTrue("the trainer says the one thing he has for the floor", r.host.said.contains(Lines.NOT_BEATEN))
+        assertEquals("no continue: the only way out is the start screen", 0f, r.fight.continueLeft, 0f)
+    }
+
     @Test
     fun theCareerTotalSurvivesTheBoutTheScoreDoesNot() {
         val r = Desk.Rig()

@@ -34,7 +34,6 @@ class BoxerTest {
         var staggerCloses = 0
         var stunOn = 0
         var stunOff = 0
-        var fuseBurned = 0
         var strikeStarts = 0
         var wrongSide = 0
         var awards = ArrayList<String>()
@@ -42,7 +41,6 @@ class BoxerTest {
         override fun onTell(attack: Boxer.Attack, feint: Boxer.Feint?, tellT: Float) { if (feint == null) tells.add(attack) else feints.add(feint) }
         override fun onStrikeStart(attack: Boxer.Attack, strikeT: Float) { strikeStarts++ }
         override fun onStrike(attack: Boxer.Attack, answer: Answer, result: StrikeResult, dmg: Int) { strikes.add(Triple(attack, answer, result)); dmgs.add(dmg) }
-        override fun onFuseBurned(attack: Boxer.Attack) { fuseBurned++ }
         override fun onRecover(attack: Boxer.Attack) {}
         override fun onGuard(open: Boolean, by: String) { guards.add((if (open) "open:" else "close:") + by) }
         override fun onStagger(open: Boolean, seconds: Float) { if (open && seconds == 0f) staggerOpens++ else if (!open) staggerCloses++ }
@@ -60,7 +58,6 @@ class BoxerTest {
     private fun boxer(rec: Rec, difficulty: Int = 1, round: Int = 1, drill: Boxer.Drill = Boxer.Drill.OFF): Boxer {
         val b = Boxer()
         b.listener = rec
-        b.hangT = Boxer.HANG_T[difficulty]
         b.newFight(seed = 7, difficulty = difficulty)
         b.newRound(round)
         b.drill = drill
@@ -84,37 +81,31 @@ class BoxerTest {
         while (!pred()) { b.update(DT, DT, body); t += DT; assertTrue("condition reached within $max s", t < max) }
     }
 
-    // ------------------------------------------------------------------ the two clocks
+    // ------------------------------------------------------------------ the tell, end to end
 
     @Test
-    fun aFrozenWorldHoldsTheTellWhileTheHangAndTheFuseBurn() {
+    fun theTellPlaysThroughAndTheJabLands() {
+        // This test used to be `aFrozenWorldHoldsTheTellWhileTheHangAndTheFuseBurn`, and it was
+        // the clearest statement of the old law there was: a frozen world left the tell exactly
+        // where it stood while the hang and the fuse burned on real time underneath it. The law
+        // is gone (2026-09-10) and so are both timers; what is left to assert is that the tell
+        // simply plays, at one speed, and arrives.
         val rec = Rec(); val b = boxer(rec, drill = Boxer.Drill.PECK_L); val body = standing()
         until(b, body) { b.phase == Boxer.Phase.TELL }
         assertEquals(Boxer.Attack.PECK_L, b.attack)
-        assertEquals("the hang is armed on the tell's first frame", Boxer.HANG_T[1], b.hangLeft, 1e-5f)
         assertTrue("the arc exists from the first frame", b.aimSet)
-        val frozenAt = b.tellFrac
+        assertEquals("the read has not started to run yet", 0f, b.tellFrac, 0.05f)
+        assertEquals("the quarter-second grace is in the window the player gets",
+            Boxer.Attack.PECK_L.tellT * Boxer.TELL_MUL[0] * Fighter.ROOSTER.tellMul * Boxer.TELL_MUL_DIFF[1] + Boxer.TELL_GRACE,
+            b.tellDur, 1e-4f)
         body.moving = 0f
-        run(b, body, 0.5f, wdt = 0f)
-        assertEquals("a frozen world leaves the tell where it was", frozenAt, b.tellFrac, 1e-6f)
-        assertEquals("...while the hang burns on real time", Boxer.HANG_T[1] - 0.5f, b.hangLeft, 0.02f)
-        run(b, body, 0.5f, wdt = 0f)
-        assertEquals("the hang is gone", 0f, b.hangLeft, 1e-6f)
-        assertTrue("the fuse is burning", b.fuseLeft in 0.01f..Boxer.FUSE_T)
-        assertEquals("ONE FLOOR: a burning fuse does not raise it", 0.06f, b.floorNow(0.06f), 1e-6f)
-        run(b, body, Boxer.FUSE_T + 0.1f, wdt = 0f)
-        assertTrue("the fuse burned", b.fuseBurned); assertEquals(1, rec.fuseBurned)
-        assertEquals("...and a burned fuse does not raise it either", 0.06f, b.floorNow(0.06f), 1e-6f)
-        assertEquals("...and still nothing was thrown: the world never moved", Boxer.Phase.TELL, b.phase)
-        assertEquals(frozenAt, b.tellFrac, 1e-6f)
-        // your move throws his punch
-        body.moving = 1f
+        run(b, body, b.tellDur * 0.5f)
+        assertTrue("a still player no longer stops it", b.tellFrac > 0.3f)
         until(b, body) { rec.strikes.isNotEmpty() }
         assertEquals(1, rec.strikeStarts)
         assertEquals("centred and level: the jab lands", StrikeResult.HIT, rec.strikes[0].third)
         assertEquals("...for no damage in a drill", 0, rec.dmgs[0])
         assertEquals("he is open in his recover", Boxer.Phase.RECOVER, b.phase)
-        assertEquals("his recover runs on the same one floor", 0.06f, b.floorNow(0.06f), 1e-6f)
     }
 
     // ------------------------------------------------------------------ the collider

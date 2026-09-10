@@ -1,5 +1,34 @@
 # X3 KNOCKOUT — GAME DESIGN DOCUMENT (prototype: one boxer)
 
+> # ⚠ THE TIME LAW IS REMOVED (the owner, 2026-09-10)
+>
+> *"remove the superhotvr mechanic - players just always move."*
+>
+> **The world runs at 1.0, always.** `Clock.timeScale` for `Forced.NONE` is the constant 1, the
+> floor is 1, and `wdt == dt` in every frame of an ordinary round. **Everything in §0.1, §1, §2
+> and `docs/LAW.md` that describes time as a thing the player spends is now HISTORY** — kept
+> because it explains why half the constants in this game are the size they are, and because the
+> build it describes is tagged `superhot-final` and archived in `~/Projects/_backups`.
+>
+> What went with it: the per-difficulty floor and the one-floor ruling; the hang and the fuse
+> (`HANG_T`, `FUSE_T`, `burnHangAndFuse`, `onFuseBurned`) — both bounded a read that cannot be
+> paused any more; the Metronome's TEMPO **clock** (it survives as his footwork mirror, which
+> would otherwise have run the champion at a tenth speed against anyone who stood still); the
+> left rail, which WAS the time scale and would have been an instrument reading a constant; and
+> the lab's TIME FLOOR, HANG and KNEE rows.
+>
+> What deliberately stayed: the four things that still stop the world for a reason the player can
+> SEE — the menu, the impact frame, the referee's count and the knockdown's slow motion. Those
+> are staging and juice, and they are the opposite of a tax on standing still. The forced punch
+> window stayed too: it is what stops a mashed tap being a second punch. The yaw/dodge axis split
+> stayed because it costs nothing and the telemetry still reads it. And `MotionTracker` is
+> untouched — lean, duck and step are the dodges, and they were never the time law.
+>
+> **What it means for the fight:** the tells are real seconds now (0.44–1.05 s with the grace),
+> the round clock is sixty real seconds, hearts refill on their own, and standing still is fatal
+> rather than free. It is the 1984 cabinet the brief asked for.
+
+
 > **STATUS 2026-09-10 — the one-floor law SHIPPED; the rest of `docs/LAW.md` has not.** What is in
 > the build: `Boxer.floorNow()` collapsed from a four-branch table to one game-wide floor, and
 > `Clock.FLOOR_STILL = 0.03` for every difficulty (LAW.md §1.2, and rule 1 of §0.1 below). Measured

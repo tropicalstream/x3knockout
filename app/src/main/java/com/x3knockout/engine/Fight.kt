@@ -575,8 +575,10 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             liveMenu.add("DIFFICULTY"); liveMenu.add("DODGE SENSE"); liveMenu.add("STEP SENSE")
             liveMenu.add("LEFT PAD"); liveMenu.add("CAPTIONS"); liveMenu.add("MOTION LAB")
             if (store.lab) {
-                liveMenu.add("TIME FLOOR"); liveMenu.add("HANG"); liveMenu.add("PITCH COMP"); liveMenu.add("DRILL")
-                if (debugBuild) liveMenu.add("KNEE")
+                // TIME FLOOR, HANG and KNEE went with the time law (2026-09-10): three rows that
+                // tuned a world speed nothing varies any more. What is left in the lab is what
+                // still does something — the posture compensation and the drill.
+                liveMenu.add("PITCH COMP"); liveMenu.add("DRILL")
             }
             liveMenu.add("CREDITS")
             liveMenu.add("RESET SETTINGS")
@@ -586,6 +588,18 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     // The rise card is a card: there is nothing to punch on it, so the menu is on offer there the
     // same as on the title. INTRO, ROUND_CARD and KO stay closed — the player may still be tapping.
     val canQuit: Boolean get() = state == State.TITLE || state == State.GAME_OVER || state == State.RISE
+    /**
+     * THE START SCREEN'S SELECTION (the owner, 2026-09-10: *"create a splash start screen w
+     * settings"*). 0 START · 1 SETTINGS · 2 CREDITS.
+     *
+     * The attract screen said INSERT COIN and hid the settings behind a double-tap, which is the
+     * cabinet's own idiom and also a thing nobody discovers. A start screen is a menu: swipe the
+     * right pad to move, tap to choose, and the settings are a row on it like anything else. The
+     * double-tap still opens them, because it does so everywhere else in the suite and muscle
+     * memory is worth more than tidiness.
+     */
+    var titleSel = 0; private set
+    val titleItems = listOf("START", "SETTINGS", "CREDITS")
     var menuSel = 0; private set
     var menuTop = 0; private set
     private var resetArmed = false
@@ -601,12 +615,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         "LEFT PAD" -> if (store.leftPad) "ON" else "OFF"
         "CAPTIONS" -> when (store.captions) { 0 -> "AUTO"; 1 -> "ON"; else -> "OFF" }
         "MOTION LAB" -> if (store.lab) "ON" else "OFF"
-        // PCT and not '%': `StrokeFont` carries no per-cent glyph and drops the character in silence.
-        "TIME FLOOR" -> "${(Clock.LAB_FLOORS[store.timeFloor.coerceIn(0, 4)] * 100f).toInt()} PCT"
-        "HANG" -> "%.1f S".format(Locale.US, Boxer.HANG_LAB[store.hang.coerceIn(0, 2)])
         "PITCH COMP" -> "%.1f".format(Locale.US, PITCH_COMP[store.pitchComp.coerceIn(0, 2)])
         "DRILL" -> Boxer.Drill.entries[store.drill.coerceIn(0, Boxer.Drill.entries.size - 1)].name.replace('_', ' ')
-        "KNEE" -> if (store.knee == 0) "A" else "B"
         "CREDITS" -> ">"
         "RESET SETTINGS" -> if (resetArmed) "TAP AGAIN TO CONFIRM" else ""
         "QUIT" -> if (quitArmed) "TAP AGAIN TO CONFIRM" else "END OF LINE"
@@ -677,14 +687,11 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
      */
     fun applySettings() {
         clock.difficulty = store.difficulty
-        clock.labFloor = if (store.lab) store.timeFloor.coerceIn(0, 4) else Clock.LAB_FLOOR_OFF
-        clock.knee = if (store.knee == 0) Clock.Knee.A else Clock.Knee.B
         // THE KNEE HAS TO REACH THE TRACKER, not just the clock (see Clock's class note).
         MotionTracker.W_REF = clock.wRef
         MotionTracker.GAMMA = clock.gamma
         MotionTracker.V_STEP = when (store.stepSense) { 0 -> 0.45f; 1 -> 0.32f; else -> 0.22f }
         boxer.difficulty = store.difficulty
-        boxer.hangT = if (store.lab) Boxer.HANG_LAB[store.hang.coerceIn(0, 2)] else Boxer.HANG_T[store.difficulty.coerceIn(0, 2)]
         boxer.drill = if (store.lab) Boxer.Drill.entries[store.drill.coerceIn(0, Boxer.Drill.entries.size - 1)] else Boxer.Drill.OFF
     }
 
@@ -758,12 +765,16 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         if (creditsOpen) { creditsOpen = false; host.sfx(Sfx.TICK); return }
         if (menuOpen) { menuActivate(); return }
         when (state) {
-            State.TITLE -> coin()
+            State.TITLE -> when (titleSel) {
+                1 -> openMenu()
+                2 -> { creditsOpen = true; creditsScroll = 0f; host.sfx(Sfx.SELECT) }
+                else -> coin()
+            }
             State.INTRO -> if (stateT > INTRO_SKIP_T) introSkipWanted = true
             State.ROUND_END -> if (stateT > CORNER_SKIP_T) skipCorner()
             State.KO -> if (stateT > TALLY_SKIP_T) enterRise()
             State.RISE -> if (stateT > RISE_SKIP_T) leaveRise()
-            State.GAME_OVER -> if (gameOverT > GAMEOVER_SKIP_T) { if (continueLeft > 0f) continueGame() else enterTitle() }
+            State.GAME_OVER -> if (gameOverT > GAMEOVER_SKIP_T) enterTitle()
             State.FIGHT, State.KNOCKDOWN_COUNT -> {}   // urgent taps went through [punch]; a settled burst adds nothing
             else -> {}
         }
@@ -822,6 +833,14 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 Swipe.RIGHT -> adjust(1)
             }
             scrollMenu()
+            return
+        }
+        if (state == State.TITLE) {
+            when (dir) {
+                Swipe.UP, Swipe.FORWARD -> { titleSel = (titleSel - 1 + titleItems.size) % titleItems.size; host.sfx(Sfx.TICK) }
+                Swipe.DOWN, Swipe.BACK -> { titleSel = (titleSel + 1) % titleItems.size; host.sfx(Sfx.TICK) }
+                else -> {}
+            }
             return
         }
         if (state != State.FIGHT) return
@@ -1151,11 +1170,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             "LEFT PAD" -> store.leftPad = !store.leftPad
             "CAPTIONS" -> store.captions = (store.captions + d + 3) % 3
             "MOTION LAB" -> store.lab = !store.lab
-            "TIME FLOOR" -> store.timeFloor = (store.timeFloor + d + 5) % 5
-            "HANG" -> store.hang = (store.hang + d + 3) % 3
             "PITCH COMP" -> store.pitchComp = (store.pitchComp + d + 3) % 3
             "DRILL" -> { val n = Boxer.Drill.entries.size; store.drill = (store.drill + d + n) % n }
-            "KNEE" -> store.knee = 1 - store.knee
             "CREDITS" -> { creditsOpen = true; creditsScroll = 0f }
             "RESET SETTINGS", "QUIT" -> menuActivate()
         }
@@ -1342,13 +1358,6 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         enterIntro()
     }
 
-    /** A coin buys the fight back and nothing else: round 1, score 0, straight to the card (DESIGN.md §5.2). */
-    private fun continueGame() {
-        Log.i(TAG, "CONTINUE")
-        newFight()
-        enterRoundCard()
-    }
-
     /**
      * THE CEREMONY, AND IT NAMES BOTH MEN NOW (VOICE.md 5, 6.6).
      *
@@ -1521,18 +1530,35 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         ev("KO")
     }
 
+    /**
+     * YOU LOSE THE CARD, NOT THE FIGHT (the owner, 2026-09-10: *"whenever player loses, they
+     * restart from beginning of game"*).
+     *
+     * The arcade rule was a coin: a continue put you back in the same bout with the same
+     * man, and the ladder never moved either way, so a loss cost nine seconds and a credit. That
+     * is a cabinet's business model, and it is the opposite of the story the card now tells — a
+     * climb you can be knocked off. So the continue is gone and the ranking goes with the loss:
+     * back to the Rooster, ranked nothing, and everything you were carrying is spent.
+     *
+     * The BELT is not cleared. Winning it once happened; a later loss does not unhappen it, and
+     * `CHAMPION` stays on the plate for whoever earned it.
+     */
     private fun gameOver() {
         state = State.GAME_OVER; stateT = 0f; gameOverT = 0f; downWho = null
-        continueLeft = CONTINUE_S
+        continueLeft = 0f
         score = (score * DIFF_MULT[store.difficulty.coerceIn(0, 2)]).toInt()
         newHigh = score > store.highScore && score > 0
         store.highScore = score
+        careerScore = 0
+        boutIndex = 0
+        store.resetCareer()
         clearVerbs()
         clock.clearForced()
         if (!noDecision) boxer.taunt()   // he stands over you; after a decision he is already bouncing (`win`)
         host.sfx(if (newHigh) Sfx.HISCORE else Sfx.GAMEOVER)
+        host.say(Lines.NOT_BEATEN, patienceMs = 5000L)
         host.music(Music.TITLE)
-        Log.i(TAG, "GAME OVER score=$score newHigh=$newHigh noDecision=$noDecision")
+        Log.i(TAG, "GAME OVER score=$score newHigh=$newHigh noDecision=$noDecision — the card resets to bout 1")
         ev("GAME OVER")
     }
 
@@ -1612,8 +1638,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             State.GAME_OVER -> {
                 body(dt); boxer.update(clock.wdt, dt, body)
                 gameOverT += dt
-                if (continueLeft > 0f) { continueLeft = max(0f, continueLeft - dt); if (continueLeft <= 0f) Log.i(TAG, "CONTINUE expired") }
-                else if (gameOverT >= CONTINUE_S + GAMEOVER_HOLD_T) enterTitle()
+                if (gameOverT >= GAMEOVER_HOLD_T) enterTitle()
             }
         }
         priorityText = when {
@@ -1963,7 +1988,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             val show = when (store.captions) { 1 -> true; 2 -> false; else -> answerSeen[i] <= CAPTION_AUTO_TIMES }
             if (show) { answerWord = attack.word; answerT = 0f; answerDropping = false; answerDropT = 0f }
         }
-        Log.i(TAG, "TELL attack=${attack.name} feint=${feint?.name ?: "-"} round=$round floorAtStart=%.2f hangLeft=%.2f tellT=%.2f".format(Locale.US, clock.floor, boxer.hangLeft, tellT))
+        Log.i(TAG, "TELL attack=${attack.name} feint=${feint?.name ?: "-"} round=$round tellT=%.2f".format(Locale.US, tellT))
     }
 
     /**
@@ -2055,7 +2080,6 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         ev("HIS ${attack.name} ${result.name} answer=${answer.name} dmg=$d hp=$hp")
     }
 
-    override fun onFuseBurned(attack: Boxer.Attack) { Log.i(TAG, "FUSE burned attack=${attack.name}"); host.sfx(Sfx.TICK, 0.7f, 0.4f) }
     override fun onRecover(attack: Boxer.Attack) { ev("HIS ${attack.name} RECOVER") }
     override fun onGuard(open: Boolean, by: String) { Log.i(TAG, "GUARD open=$open by=$by") }
     override fun onStagger(open: Boolean, seconds: Float) {
