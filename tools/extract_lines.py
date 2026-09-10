@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""STORY.md is the script; this makes it the BUILD INPUT.
+"""VOICE.md is the script; this makes it the BUILD INPUT.
 
-Every voice line in the game is a row in a markdown table in docs/STORY.md whose first cell is an
+Every voice line in the game is a row in a markdown table in docs/VOICE.md whose first cell is an
 id in backticks and whose second is a speaker. Hand-copying 186 of those into six render scripts is
 how a game ends up with a clip nobody can trace to a line — so nothing is hand-copied: this parses
 the document and writes tools/lines.json, and the render scripts read only that.
@@ -18,10 +18,10 @@ sharing a filename means one of them is silently unreachable.
 import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STORY = os.path.join(ROOT, "docs", "STORY.md")
+STORY = os.path.join(ROOT, "docs", "VOICE.md")
 OUT = os.path.join(ROOT, "tools", "lines.json")
 
-SPEAKERS = {"SYSTEM", "PILOT", "ANNOUNCER", "BUILD", "STRAY", "USER", "CROWD"}
+SPEAKERS = {"ANNOUNCER", "REFEREE", "CORNER", "BOXER", "CROWD"}
 # id may be prefixed by the recycle mark; ids like `round_1` / `round_2` share one row
 ROW = re.compile(r"^\|\s*(♻)?\s*((?:`[a-z0-9_]+`\s*/?\s*)+)\|\s*([A-Z ()/+,–-]+?)\s*\|\s*(.*?)\s*\|")
 IDS = re.compile(r"`([a-z0-9_]+)`")

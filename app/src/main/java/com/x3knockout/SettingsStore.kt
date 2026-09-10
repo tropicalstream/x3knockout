@@ -123,7 +123,11 @@ class SettingsStore(context: Context) {
      * OFF at ship.
      */
     var lab: Boolean
-        get() = p.getBoolean("lab", true)
+        // OFF BY DEFAULT NOW. It was on through the prototype because every standing test is read
+        // on it, and the owner has just played a fight with a wall of telemetry down the right of
+        // the ring. It is an instrument, not part of the game; the row is still in the settings for
+        // the next time a number has to be measured on-head.
+        get() = p.getBoolean("lab", false)
         set(v) = p.edit().putBoolean("lab", v).apply()
     /**
      * THE LAB'S FLOOR OVERRIDE, 0..4 → 3 / 5 / 8 / 12 / 20 % — the BASE floor only (the title,

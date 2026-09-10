@@ -32,38 +32,31 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINES = os.path.join(ROOT, "tools", "lines.json")
 CONFIG = os.path.join(ROOT, "tools", "fish.config")
 BASE = os.path.join(ROOT, "app/src/main/assets")
-PARANOIDS = os.path.expanduser("~/Projects/X3Paranoids/app/src/main/assets")
+PARANOIDS = os.path.expanduser("~/Projects/X3Paranoids/app/src/main/assets")  # unused here
 API = "https://api.fish.audio/v1/tts"
 FREE_MODEL = "s2.1-pro-free"
 
-SYSTEM_CHAIN = ("highpass=f=160,lowpass=f=3900,tremolo=f=34:d=0.45,aecho=0.85:0.55:11:0.28,"
-                "acrusher=bits=10:mode=log:aa=1,volume=2.2,alimiter=limit=0.95")
-# The announcer is the same synthesiser in a stadium, not a different machine: the SAME voice with
-# the crusher taken OFF and a long room put on. That is what makes the games feel like an
-# institution the Protocol merely owns, rather than the Protocol itself with a reverb.
-ANNOUNCER_CHAIN = ("highpass=f=300,lowpass=f=3000,aecho=0.8:0.9:180|320:0.4|0.25,"
+# THE FIVE VOICES OF A BOXING CABINET, and the thing that must not drift is the SEPARATION: they
+# are mixed on one bus and the player has to know instantly who is talking while being punched.
+#   ANNOUNCER  the house PA: a big slow room, low and gravelled
+#   REFEREE    in the ring with you, no microphone: one short slap, nasal, urgent
+#   CORNER     thirty centimetres from your ear between rounds: no room at all, full band
+#   BOXER      the man in front of you, 2.6 m away, behind a gumshield: one tiny slap, muffled
+#   CROWD      six voices detuned and smeared, no consonants left
+ANNOUNCER_CHAIN = ("highpass=f=200,lowpass=f=3200,aecho=0.8:0.9:180|320:0.4|0.25,"
                    "acompressor=threshold=-16dB:ratio=3,volume=2.0,alimiter=limit=0.95")
-# BUILD is the pilot compiled: the same performance, pitch-shifted down and flattened until the
-# life is gone but the identity is not. If it stops sounding like the pilot, it has failed.
-BUILD_CHAIN = ("asetrate=44100*0.8409,aresample=44100,atempo=1.1892,"      # -3 semitones, length kept
-               "tremolo=f=17:d=0.35,chorus=0.6:0.9:50|60:0.4|0.32:0.25|0.4:2|2.3,"
-               "acrusher=bits=12:mode=log:aa=1,alimiter=limit=0.95")
-STRAY_VOICE, STRAY_RATE = "Ava", 168          # clean, unprocessed — the point of the character
-# THE USER was written to be the owner's own voice; he declined, and he was right that it is an odd
-# thing to ask of a player. It does not actually matter who it is: the USER has to read as A PERSON
-# rather than a program, and the beam chain — the sound of a voice arriving through a lit tower from
-# outside the system — supplies everything else. Daniel is chosen for MAXIMUM SEPARATION from the
-# stray (the game's other clean human register): a different sex and a different accent, so the one
-# voice that is not owned by anything can never be confused with the one voice from outside.
-USER_VOICE, USER_RATE = "Daniel", 160
-# Highpassed and lowpassed to a carrier band, phased and echoed as if it has travelled, and given a
-# slow tremolo so it never sits perfectly still. Quiet (-19) because it arrives from far away.
-USER_CHAIN = ("highpass=f=300,lowpass=f=2800,aphaser=type=t:speed=0.4:decay=0.35,"
-              "aecho=0.9:0.4:60:0.22,tremolo=f=6:d=0.15,loudnorm=I=-19:TP=-2.0")
-SPEAKER_DIR = {"SYSTEM": "voice", "ANNOUNCER": "voice", "CROWD": "voice",
-               "PILOT": "voice_hero", "BUILD": "voice_hero", "STRAY": "voice_stray",
-               "USER": "voice_user"}
-SPEAKER_EXT = {"voice": "m4a", "voice_hero": "mp3", "voice_stray": "m4a", "voice_user": "m4a"}
+REFEREE_CHAIN = ("highpass=f=320,lowpass=f=3600,aecho=0.9:0.25:42:0.18,"
+                 "acompressor=threshold=-14dB:ratio=4,volume=2.1,alimiter=limit=0.95")
+CORNER_CHAIN = ("highpass=f=110,lowpass=f=7000,acompressor=threshold=-18dB:ratio=3.5:attack=4,"
+                "loudnorm=I=-16:TP=-1.5")
+BOXER_CHAIN = ("highpass=f=260,lowpass=f=2600,aecho=0.92:0.2:18:0.12,volume=1.7,alimiter=limit=0.95")
+VOICES = {"ANNOUNCER": ("Ralph", 165), "REFEREE": ("Fred", 186), "CORNER": ("Reed", 190),
+          "BOXER": ("Ralph", 172), "CROWD": ("Fred", 148)}
+CHAINS = {"ANNOUNCER": ANNOUNCER_CHAIN, "REFEREE": REFEREE_CHAIN, "CORNER": CORNER_CHAIN,
+          "BOXER": BOXER_CHAIN}
+SPEAKER_DIR = {"ANNOUNCER": "voice", "REFEREE": "voice", "CORNER": "voice", "CROWD": "voice",
+               "BOXER": "voice_hero"}
+SPEAKER_EXT = {"voice": "m4a", "voice_hero": "mp3"}
 
 def sh(*a):
     subprocess.run(a, check=True, capture_output=True)
@@ -76,21 +69,18 @@ def dur_ms(path):
 def say(text, voice, rate, aiff):
     sh("say", "-v", voice, "-r", str(rate), "-o", aiff, text)
 
-def render_system(text, out, tmp, lid, rate=150):
-    aiff = os.path.join(tmp, lid + ".aiff"); say(text, "Zarvox", rate, aiff)
-    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", SYSTEM_CHAIN,
-       "-ac", "1", "-ar", "22050", "-c:a", "aac", "-b:a", "56k", out)
-
-def render_announcer(text, out, tmp, lid):
-    aiff = os.path.join(tmp, lid + ".aiff"); say(text, "Zarvox", 130, aiff)
-    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", ANNOUNCER_CHAIN,
-       "-ac", "1", "-ar", "22050", "-c:a", "aac", "-b:a", "56k", out)
+def render_say(sp, text, out, tmp, lid):
+    voice, rate = VOICES[sp]
+    aiff = os.path.join(tmp, lid + ".aiff"); say(text, voice, rate, aiff)
+    ext = "mp3" if out.endswith(".mp3") else "m4a"
+    codec = ["-c:a", "libmp3lame", "-b:a", "64k"] if ext == "mp3" else ["-c:a", "aac", "-b:a", "56k"]
+    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", CHAINS[sp], "-ac", "1", "-ar", "22050", *codec, out)
 
 def render_crowd(text, out, tmp, lid, voices=6):
     """One word, six times, detuned and offset — a crowd is not a voice, it is a spread."""
     parts = []
     for i in range(voices):
-        aiff = os.path.join(tmp, f"{lid}_{i}.aiff"); say(text, "Zarvox", 140 + (i - 3) * 4, aiff)
+        aiff = os.path.join(tmp, f"{lid}_{i}.aiff"); say(text, "Fred", 146 + (i - 3) * 2, aiff)
         wav = os.path.join(tmp, f"{lid}_{i}.wav")
         cents = (i - 2.5) / 2.5 * 40.0
         ratio = 2 ** (cents / 1200.0)
@@ -149,7 +139,7 @@ def main():
     if listing:
         for l in lines: print(f"{l['speaker']:9s} {l['id']:24s} {l['text']}")
         return 0
-    tmp = os.path.join("/tmp", "x3knockout_voice"); os.makedirs(tmp, exist_ok=True)
+    tmp = os.path.join("/tmp", "x3discs_voice"); os.makedirs(tmp, exist_ok=True)
     cfg = fish_config()
     done = {"rendered": 0, "recycled": 0, "skipped": 0, "failed": []}
     for d in set(SPEAKER_DIR.values()): os.makedirs(os.path.join(BASE, d), exist_ok=True)
@@ -170,12 +160,8 @@ def main():
         if dry:
             print(f"  would render {sp:9s} {lid}: {text[:60]}"); continue
         try:
-            if sp == "SYSTEM":      render_system(text, out, tmp, lid)
-            elif sp == "ANNOUNCER": render_announcer(text, out, tmp, lid)
-            elif sp == "CROWD":     render_crowd(text, out, tmp, lid, voices=int(lid[-1]) if lid[-1].isdigit() else 6)
-            elif sp == "STRAY":     render_stray(text, out, tmp, lid)
-            elif sp == "USER":      render_user(text, out, tmp, lid)
-            elif sp in ("PILOT", "BUILD"): render_pilot(text, out, tmp, lid, cfg, build=(sp == "BUILD"))
+            if sp == "CROWD": render_crowd(text, out, tmp, lid)
+            else: render_say(sp, text, out, tmp, lid)
             done["rendered"] += 1
             print(f"  {sp:9s} {lid:24s} {dur_ms(out):5d} ms  {text[:48]}")
         except Exception as ex:

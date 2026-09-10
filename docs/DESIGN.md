@@ -1,5 +1,17 @@
 # X3 KNOCKOUT — GAME DESIGN DOCUMENT (prototype: one boxer)
 
+> **AMENDED 2026-09-10 — `docs/LAW.md` IS NOW THE AUTHORITY ON THE CLOCK, and §1 and §2 defer to
+> it.** The owner played the build and reported that he could not see the SUPERHOT mechanic at all.
+> He was right, and the cause is one number: `Boxer.FLOOR_IDLE = 0.35` meant the world never ran
+> slower than a third speed while the opponent was idle, and a **real-time** fuse then ramped it to
+> 0.60 whatever the player did. Measured over the Rooster's own R1 phrase A, a player who never
+> moved experienced `worldT / realT = 0.230`. LAW.md replaces the whole phase-floor design with one
+> constant for the entire game (`FLOOR_STILL` 0.03), splits the gyro so that **looking is free and
+> only a slip or a duck is charged**, turns the forced punch from rate 1.0 into a forced *rate*,
+> and re-derives every world-timed window that follows from that. **Where §2 below and LAW.md
+> differ, LAW.md wins**; §2 is kept as the record of what was built and why it failed. MOTION.md
+> still outranks both on what the body reads.
+
 > **AMENDED 2026-09-09 — the owner's ruling (commit `13741bd`; applied to BOXER.md's tables and to
 > the code).** Every punch travels on **world** time, his and yours. Where §0, §2.2, §2.4, §2.6 and
 > §2.9 below call his STRIKE a forced real-time state (`Forced.STRIKE`, rate 1.0), read instead: the
@@ -63,16 +75,21 @@ proposal with a test attached, and §15 lists the ones that decide the design.
 Hands at the temples are the guard. Left tap = left glove, right tap = right glove, head level =
 you hit his head, head down = you hit his body, both temples inside 120 ms while the KO meter is
 lit = the big punch. Tilt = slip, nod = duck, right-pad swipe DOWN held = guard, right-pad swipe
-LEFT / RIGHT (or a real sidestep) = step. The clock is x3discs' clock with the floor handed to the
-boxer's state: he circles at 0.35 while idle, hangs at 0.06 for 0.8 real seconds when he winds up,
-then a fuse ramps him at you; his glove's flight is a forced real-time strike (0.25–0.33 s) that
-you either leave or eat; your punches force the world to run (whiffs longer than hits); a landed
-hit stops both clocks for 4–12 frames with a white-hot glove; a PERFECT dodge — off the line
-inside his strike — buys 0.6 real seconds in which your next punch is a COUNTER thrown at the
-floor; knockdowns fall at 0.22 and the referee counts on the real clock. Three rounds of 60 world
-seconds against ROY "THE ROOSTER" RUDD, whose five attacks each have one cheap answer, two safe
-ones and one fatal one. The score gives you all the time you want and asks, at the KO, what you
-did with it.
+LEFT / RIGHT (or a real sidestep) = step. **The clock is x3discs' clock with one floor for the
+whole game (`FLOOR_STILL` 0.03) and nobody allowed to raise it** (`docs/LAW.md`): stand still and
+the world stops — his telegraph frame holds on the glass for nearly three seconds, his glove crawls
+across at 7 cm/s trailing an 80 cm arc that hangs with it, the crowd drops to a hush and every
+hostile sound groans a semitone-and-a-half down; move, and your move is what throws his punch. Only
+a **roll or a pitch** is charged, because on this rig those are the slip and the duck; **looking
+around is free**, exactly as SUPERHOT rules it. His glove flies on world time and yours does too;
+your own punch forces a *rate* (0.55 jab / 0.65 hook / 0.90 special), never a rail, so the world
+leans in as you throw and settles back the moment you stop; a landed hit stops both clocks for
+4–12 frames with a white-hot glove; a PERFECT dodge — off the line inside his strike — buys 0.6
+real seconds in which your next punch is a COUNTER thrown at the floor, in a genuinely frozen
+world; knockdowns fall at 0.22 and the referee counts on the real clock. Three rounds of **36
+world seconds** against ROY "THE ROOSTER" RUDD, whose five attacks each have one cheap answer, two
+safe ones and one fatal one. The score gives you all the time you want and asks, at the KO, how
+little of the world's you spent getting there.
 
 ---
 
@@ -115,6 +132,15 @@ player's motion, amplified. But that is HIS clock, it is announced in his billin
 one fighter whose entire character is that he has read the rules — and the WORLD's floor is
 untouched even for him.
 
+> **This amendment became constants on 2026-09-10: `docs/LAW.md`.** Note in passing that the
+> champion's own clock, `w = r × (TEMPO_FLOOR + gimmickK × body.moving)` = `0.10 + 2.2 × motion`,
+> is **already the correct SUPERHOT shape**, and its own KDoc says the quiet part out loud — *"a
+> still player faces a still opponent, which is the whole promise."* `FLOOR_IDLE = 0.35` broke that
+> promise for the other four men on the card while one fighter kept it as a gimmick. Under LAW.md
+> he stays distinct without changing a number: he reaches rate 1.0 at motion 0.41 where the world
+> reaches it at 1.00, so he answers the same movement about 2.2× as hard as the world does. His
+> billing becomes true instead of ironic.
+
 ---
 
 ## 1. THE VERBS
@@ -135,7 +161,7 @@ the hands can drop between exchanges (§14, neck and shoulders).
 | head down: `duckAmt ≥ 0.35` (≈10° of nod at the shipped DODGE SENSE), leave at 0.25 | `MotionTracker.pitchG − restPitch` (gravity, drift-free) | **AIM LOW** — every punch from here is a body blow; and from `duckAmt ≥ 0.6` the collider is under a head-high hook: **DUCK** |
 | head tilt: the shaped lean | `MotionTracker.roll − restRoll` | **SLIP** — the eye and the collider move sideways (0.55 m at full); the punch misses geometrically, never by a threshold |
 | RIGHT pad swipe DOWN, held | the existing `AXIS_DRIVE` path (`deflectorStart/End` → `guardStart/End`) | **GUARD** — gloves up until the finger lifts; a flick is a 0.5 s world pop. Head punches into the guard chip 2; a hook CRUSHES it (half damage, guard forced down 0.4 s real); the uppercut cannot be blocked |
-| RIGHT pad swipe LEFT / RIGHT | the finger-up classifier | **STEP** — `Forced.STEP` 0.35 s at rate 1.0, the camera and collider slide 0.55 m, invulnerable for the flight, exposed on landing. The pad-only escape for anyone who cannot lean; the answer to the round-3 tracking uppercut |
+| RIGHT pad swipe LEFT / RIGHT | the finger-up classifier | **STEP** — `Forced.STEP` 0.35 s at a forced FLOOR rate of **0.70** (LAW.md §5), the camera and collider slide 0.55 m, invulnerable for the flight, exposed on landing. The pad-only escape for anyone who cannot lean; the answer to the round-3 tracking uppercut |
 | a real sidestep | `MotionTracker.step` (the four gates) | the same **STEP**, logged `BODY`; blanked 150 ms after any pad touch, so punch-then-step is a designed impossibility — the corner says so once (§10) |
 | RIGHT pad swipe UP | one-shot crossing (the old recall path) | **THE SPECIAL by pad** — only with `LEFT PAD OFF` (§1.5); otherwise a soft click that still spends its quantum |
 | RIGHT pad double-tap / triple-tap | the burst (off the arena only) | settings / re-centre + rest posture |
@@ -146,6 +172,20 @@ app that consumes the `MotionEvent` stops that is unknown until measured (TEST.m
 pad is TAP ONLY, and the title says so: `DON'T SLIDE THE LEFT PAD`. Yaw does nothing to a punch:
 left / right is the hands' job, and a yaw rule would be a hidden third aim axis the player cannot
 see.
+
+**What every one of these verbs COSTS is now LAW.md §5, not §2.3 below.** The short version: a
+punch forces a *rate* rather than rate 1.0 (jab 0.55, hook 0.65, special 0.90, step 0.70), and it
+forces it as a **floor** — `max(lawRate, forcedRate)` — so a player who punches while moving hard
+still gets their own motion in the answer. Forcing exists for one reason and it survives the
+change: on the owner's recorded run a delicate cut-tap drove `motion` to 0.29 and a slap drove it
+to 0.96, and a forced floor makes the two cost the same.
+
+**And that last paragraph about yaw is now load-bearing twice over.** Because §1.3 makes the nod
+the aim and §3.3 makes the tilt the slip, **pitch and roll are the body and yaw is the camera**,
+which is exactly the distinction SUPERHOT draws when it says looking around does not advance time.
+That is why the clock is charged on `hypot(ω_pitch, ω_roll) + 0.15 × |ω_yaw|` rather than on |ω|
+(LAW.md §1.3). It is not a special case bolted onto the sensor; it falls straight out of the verb
+table above.
 
 ### 1.3 Head and body are one axis: the duck is the aim
 The boxer's head sits at your eye height and his body is below it, so looking at the body IS a nod,
@@ -260,6 +300,18 @@ never name a pad.
 
 ## 2. THE TIME LAW, MADE EXCITING
 
+> **SUPERSEDED 2026-09-10 by `docs/LAW.md`. Read that instead; this section is the record of what
+> was built and of the reasoning that turned out to be wrong.** In one line: §2.2's phase-floor
+> table made the CLOCK the difficulty, which DESIGN.md §0.1 (written the next morning, by the
+> owner) forbids, and the result was a world that never froze. The specific claims below that are
+> now false — because an implementer skimming will otherwise act on them — are: the floor is a
+> function of the boxer's state (§2.2, all of it); the hang and the fuse (§2.2, §2.7 beat 4); a
+> punch forces rate 1.0 (§2.3, §2.4); `Forced.STRIKE` exists (§2.4); the idle floor is high on
+> purpose (§2.8); and the 3:00 real cap (§2.8, §2.9). **§2.1 is still true and still matters**:
+> the law itself, the Set B knee, ATTACK/RELEASE, the quanta decaying on real time and the absence
+> of any anti-wiggle patch are all kept whole. §2.5 (hit-stop) and §2.6 (the counter window) are
+> unchanged and correct.
+
 ### 2.1 What stays [on disk]
 `Clock.kt` is kept whole: `timeScale = floor + (1 − floor) × clamp(motion + act, 0, 1)`, Set B
 (`W_REF 1.9`, `GAMMA 1.8` — an ordinary scan costs 0.20, a snap saturates), `ATTACK 0.04 /
@@ -289,8 +341,7 @@ puzzle": it puts an upper bound of ≈ 2 real seconds on any read. A tell author
 (the R1 peck) costs a moving player 0.5 s and a perfectly still one 0.8 s (the hang buys 0.05 s
 of world) + 1.2 s (the ramp buys 0.40 s) + 0.06 / 0.60 ≈ **2.1 real seconds** — the spread that
 IS the game. The fuse is DRAWN: the
-right rail is the REFLEX rail and drains through the hang and the fuse (§8); the player sees the
-read running out.
+right rail was the REFLEX rail draining through them (§8). **Both are deleted; see LAW.md §2.**
 
 The release is instantaneous by construction: the floor change is a state switch, so the moment
 he goes from IDLE (0.35) to TELL (0.06) a still player's world snaps to the hang in one frame.
@@ -401,26 +452,44 @@ for the still one. What the frozen frame says, in strokes, additive, saturated (
    a wind-up whose glove never goes white and whose bead never leaves the glove; at the floor a
    feint and a real punch look identical for the first 0.15 s of world time, then diverge — the
    read is about whether the glove lights.
-4. The REFLEX rail drains through the hang; when it empties the fuse ramps and he comes.
+4. ~~The REFLEX rail drains through the hang; when it empties the fuse ramps and he comes.~~
+   **The hang and the fuse are gone (LAW.md §2).** The rail becomes TIME-TO-IMPACT on the
+   committed glove, on the world clock (LAW.md §8.6) — the same instrument telling the truth
+   instead of counting down a timer the player could not affect.
 5. The SOUND doubles what the eye can lose: a ducking or leaning head can carry the crest out of the
    62° field, so the uppercut is crowed and the hooks are stamped (BOXER.md §3).
 
 ### 2.8 How a fight keeps feeling like a fight — the checklist
-- The idle floor is high (0.35): he never stands still while you think, because there is nothing to
-  think about until he winds up.
-- The hang has a fuse (0.8 + 1.2 s): a read is never free for long.
-- Punches force the world: you cannot punch and then freeze to admire it; his counter runs.
-- Whiffs cost more than hits; hearts refill on world time (§4.4).
-- The stagger's opening is measured in punches; the counter window is real time.
-- Everything atmospheric is on the real clock: the crowd, the bell, the announcer, the idle bob of
-  your own gloves at the bottom of the frame (so a frozen boxer reads as your reflexes, not a
-  paused game), the round card, the corner.
-- Rounds are SHORT in world time (60 s) and the bell is on the WORLD clock — a careful player's
-  round lasts longer in real time (the SUPERHOT contract kept) — with a real-time cap of 3:00 per
-  round after which the floor sits at 0.35 for the rest of the round (a soft anti-stall).
-- STILL detection (`Clock.still`, 1 s under rate 0.10) is repurposed: still while he is IDLE for
-  3 real seconds → the crowd boos and he FEINTS (R1) / his next tell is 20 % shorter (R2) / he
-  throws a real-time half-peck (R3). Stillness in a fight is answered by the fight.
+**REPLACED. The list below is the old one struck through in prose; LAW.md §4 is the current one.**
+- ~~The idle floor is high (0.35)~~ → **The floor is 0.03 and never moves.** He never stands still
+  *because you froze him*, and there is nothing to think about until he winds up — so the answer to
+  the empty frozen frame is **DENSITY**, not a floor: he throws more, waits less, and a frozen
+  player is looking at a committed glove ≈ 43 % of the round (CARD.md's COMMITMENT column).
+- ~~The hang has a fuse (0.8 + 1.2 s): a read is never free for long.~~ → **The read is free for as
+  long as the player wants it**, and what ends it is the player deciding to move. A hidden
+  real-time clock that shortens a read is exactly what §0.1 rule 4 forbids.
+- Punches force the world — **but a rate, not a rail** (LAW.md §5). You still cannot punch and then
+  freeze to admire it; his counter still runs; it runs at 0.55 rather than at 1.0.
+- Whiffs cost more than hits; hearts refill on world time (§4.4). **Unchanged and still correct** —
+  the heart budget, not the punch's price, is what actually taxes mashing.
+- The stagger's opening is measured in punches; the counter window is real time. **Both unchanged
+  in meaning**, and the stagger's *number* moves (÷1.82, LAW.md §6) precisely to keep the first
+  half of that sentence true.
+- Everything atmospheric is on the real clock: the crowd's LOUDNESS, the bell, the announcer, the
+  idle bob of your own gloves at the bottom of the frame (so a frozen boxer reads as your reflexes,
+  not a paused game — widened to ±5 px because at a 0.03 floor this is the cue that separates
+  "frozen" from "crashed"), the round card, the corner. **What is NOT atmospheric and moves with
+  the clock is the hostile mix**: his whoosh, his stamp, his whistle and his tell cues are all
+  pitched by `0.5 + 0.5 × timeScale` (LAW.md §9), so the world is audibly slow. The music never
+  slows, and the contrast is the point.
+- ~~Rounds are 60 world seconds with a real-time cap of 3:00~~ → **Rounds are 36 world seconds and
+  there is no cap** (LAW.md §7). At a 0.03 floor the round clock stopped being a clock and became
+  the player's world *budget*; the honest way to keep a round a round is to spend the budget, not
+  to raise the floor behind them. 36 is the Rooster's opening phrase plus one full lap.
+- STILL detection is repurposed as before, and the stall stays on **real** seconds — legally,
+  because `Boxer.stall()` only counts while he is IDLE, so **a read is never on a real clock**
+  (LAW.md §4.3). R3's forced real-time half-peck is deleted; it was the one hostile action in the
+  game that ignored the law.
 
 ### 2.9 The two clocks — the audit list [changed]
 Every timer in the game is on exactly one of these lists; `TwoClocksTest` proves the wiring on the
@@ -433,13 +502,27 @@ per-hit extension; the feint frames; the special's 0.8 s guard-open; the ROUND C
 counting down on the plate); heart refill; his idle circling and taunts; the crowd's bob TEMPO
 (it swings with the clock, its LOUDNESS is real); the ropes' shake after a knockdown.
 
-**Real time (`dt`)**: the hang and the fuse (they bound the read, so they must run while the read
-is still); every forced timer (strike, punch, hit-stop, slow, count, step, corner); the 0.6 s
-counter window; the player's glove animation, the answer word's pop, the flash ramps, the panel
-brackets; the KO meter's pour (its target is set by world events, the fill animates at 1 point
-per 133 ms real); the crowd's loudness (it is the rate meter); the bell's ring, the announcer, the
-corner's tip; the referee's count; the 3 s stall timers; the 3:00 real cap; music. Everything that
-belongs to the player, the referee or the story.
+**Real time (`dt`)**: ~~the hang and the fuse~~ **(deleted — LAW.md §2)**; every forced timer
+(punch, hit-stop, slow, count, step, corner, getup — ~~strike~~ is gone with `Forced.STRIKE`);
+the 0.6 s counter window; the player's glove animation, the answer word's pop, the flash ramps,
+the panel brackets; the KO meter's pour (its target is set by world events, the fill animates at
+1 point per 133 ms real); the crowd's loudness (it is the rate meter); the bell's ring, the
+announcer, the corner's tip; the referee's count; the 3 s stall timers, **which count only while
+he is IDLE**; ~~the 3:00 real cap~~ **(deleted — LAW.md §7)**; music. Everything that belongs to
+the player, the referee or the story.
+
+**After LAW.md there are exactly TWO real-time timers that can change the outcome of a fight** —
+the 0.6 s counter window and the stall — and both are drawn where the player can see them
+(LAW.md §10). Everything else on the real list is feedback, cinema or atmosphere. `TwoClocksTest`
+should gain a case that fails if any *hostile* timer takes `dt`, with those two as its declared
+exceptions; that test is the only cheap way to keep this list honest through a fight's worth of
+churn.
+
+Two additions to the **world** list that follow from LAW.md §8: the glove **trails** (sampled on
+`wdt` and faded by age in world seconds, so a frozen glove keeps its arc) and the **debris** —
+sweat, crest sparks, impact stars — which move off `dt` onto `wdt` so they hang in the air when
+the world stops. The *flash* at the moment of impact stays real: it is the plate's feedback to the
+player, and it belongs to them.
 
 ---
 
@@ -626,18 +709,27 @@ Rising sets HP 40, hearts 3, meter 0. The third knockdown in the fight = the los
 score chase stays pure, a coin buys the fight back).
 
 ### 5.3 Rounds and the bell
-Three rounds — `THE STRUT`, `THE RUFFLE`, `THE COCKFIGHT` (BOXER.md §6) — of **60 world seconds**
-each, the ROUND CLOCK counting DOWN on the plate and visibly stopping when you stop. The bell is on
-the world clock: three strokes to start a round, one to end it, three fast for a KO; a wood-block
-clapper on each of the last 10 world seconds while the ropes pulse ("hurry up", and the moment to
-spend a lit meter). A real-time cap of **3:00 per round**: past it the floor holds 0.35 for the rest
-of the round (a soft anti-stall; the marquee's promise is that you may stand still, not that you
-may stand still forever). No knockout by the end of round 3 = **`TIME - NO DECISION`**, which is a
+Three rounds — `THE STRUT`, `THE RUFFLE`, `THE COCKFIGHT` (BOXER.md §6) — of **36 world seconds**
+each *(was 60; LAW.md §7)*, the ROUND CLOCK counting DOWN on the plate and visibly stopping when
+you stop. The bell is on the world clock: three strokes to start a round, one to end it, three fast
+for a KO; a wood-block clapper on each of the last **8** world seconds while the ropes pulse
+("hurry up", and the moment to spend a lit meter). ~~A real-time cap of 3:00 per round~~ —
+**deleted.** At a 0.03 floor the round clock stopped being a clock and became the player's world
+BUDGET, so the honest way to keep a round a round is to spend less budget, not to raise the floor
+behind their back; and the old cap was guaranteed to fire against precisely the careful player the
+design wants. 36 world seconds is the Rooster's opening phrase plus one full lap of his rotation,
+and the plate will therefore read `0:36` — an arcade cabinet's round clock has never been real
+seconds. No knockout by the end of round 3 = **`TIME - NO DECISION`**, which is a
 loss (the cabinet's rule: only a KO wins) and offers the continue.
 
 Between rounds — **THE CORNER**: `Forced.CORNER` 2.2 s real (the ropes slide you to your corner;
 when the world moves, time moves), +30 HP, hearts 3, and the corner man's ONE sentence, chosen from
-what you were hit by most that round (§10). Round cards: `ROUND 2` + the round's name, 1.2 s, the
+what you were hit by most that round (§10). **The corner is a CONSTANT length whenever a tip
+speaks — `CORNER_HOLD_TIP_T` 3.4 s, not `max(CORNER_T, tipMs + 1.05)`** — so the player learns its
+rhythm instead of getting a different rest depending on which mistake they made; and the same
+number is passed to `clock.forceCorner(cornerHold)`, because today `update()` gates on
+`clock.forced != CORNER && stateT >= cornerHold` and the last ~1.2 s of a stretched corner runs
+UNFORCED, answering the player's motion. A rest that is not a rest (VOICE.md §9). Round cards: `ROUND 2` + the round's name, 1.2 s, the
 yaw and the rest posture re-declared while the head is still, then the bell.
 
 ### 5.4 The KO and the tally
@@ -662,21 +754,31 @@ The score rewards the game's own verbs, in this order of magnitude, so the table
 | SPECIAL landed | 1000 |
 | KNOCKDOWN | 2000 |
 | KNOCKOUT | 5000 |
-| TIME BONUS at the KO | **10 000 × max(0, 1 − realSeconds / 180)** — the only place REAL time is judged |
+| TIME BONUS at the KO | **10 000 × max(0, 1 − worldSeconds / 108)** — *(changed; LAW.md §7)* 108 is three full 36-second rounds, so the bonus reads as the fraction of the sanctioned WORLD time you gave back. It needs a new fight-long accumulator (`fightWorldT += clock.wdt`), because `Clock.worldT` resets at every bell |
 | multiplier | consecutive dodges without being hit: × 1 … × 4, shown as the rope glow and `X3` on the plate; reset on any hit or a punished wrong-side lean |
 | punches on a closed guard | 0 |
 | a wrong-side lean that he punished (the pattern's branches, BOXER.md §7) | −50, so the branches are legible in the tally |
 
-The law gives you all the time you want; the bonus asks what you did with it. Records: `HIGH`,
-`BEST KO` (the fastest real time to a knockout), `FIGHTS` — never written from a debug launch
+The law gives you all the time you want; the bonus asks what you did with it — **and it must ask
+in world seconds.** Scoring on real seconds was a hidden punishment for playing the game the way it
+teaches: under any deep floor a thoughtful fight takes many real minutes, so the old bonus was
+structurally zero for exactly the intended player. On the world clock it becomes a reward for
+economy of movement, which is the thing the whole design is about. Records: `HIGH`,
+`BEST KO` (the fastest real time to a knockout — that one stays real, because it is a boast about
+a run and not a judgement on a play style), `FIGHTS` — never written from a debug launch
 (`SettingsStore.recordsEnabled`, as on disk). Whole-run multiplier EASY 0.75 / NORMAL 1.0 / HARD
 1.5.
 
 ### 5.6 Difficulty
+**The clock is not on this table any more** (§0.1 rule 1, LAW.md §1.2): `HANG_T` is deleted and the
+floor is `FLOOR_STILL` 0.03 on all three rows. Nobody gets a faster world for being on HARD, and
+a statue faces the same nearly-frozen world in round one of the Rooster as in round three of the
+Metronome. Everything else on the row is untouched, and there is plenty of it.
+
 | | EASY | NORMAL | HARD |
 |---|---|---|---|
-| the hang `HANG_T` | 1.2 s | 0.8 s | 0.5 s |
-| the deep floor | 0.04 | 0.06 | 0.10 |
+| ~~the hang `HANG_T`~~ | — | — | — |
+| ~~the deep floor~~ | 0.03 | 0.03 | 0.03 |
 | the counter window | 0.8 s | 0.6 s | 0.45 s |
 | his tells (world) | × 1.2 | × 1.0 | × 0.8 |
 | his HP | 100 | 120 | 140 |
@@ -718,13 +820,19 @@ EASY until the first clear).
 ## 7. THE LOOK
 
 ### 7.1 Two facts of the pipeline that shape everything
-**(a) Alpha > 1 does not whiten a saturated hue.** The fragment writes premultiplied `(rgb·a, a)`
-and an 8-bit buffer clamps both before blending, so the light a stroke adds per pixel is
-`min(1, rgb·a) · min(1, a)`: MAGENTA `(1, 0.15, 0.60)` at α 1.4 is hotter magenta, not white, and
-a zero channel stays zero. A stroke that must read WHITE is drawn with a WHITE **tint** (§12.4
-makes that a per-part colour write), not with alpha. **(b) Brightness is order-independent** —
-`min(1, Σ)` in any order — so draw order never matters and "brighter reads as nearer" has no
-exceptions to manage.
+**(a) Alpha > 1 does nothing at all, and alpha never whitens a hue.** *(Corrected 2026-09-10;
+commit `b44b86d` changed the premise and the first draft's arithmetic was left behind.)* The
+fragment now writes `fragColor = vec4(vColor.rgb, a)` — **not** premultiplied — and the blend is
+`SRC_ALPHA, ONE` onto an RGBA8 surface, which clamps every fragment component to [0, 1] *before*
+blending. So a stroke adds `clamp(rgb) × clamp(a)`, the ladder in α is **linear** (it used to be
+squared, which is why everything dim read as murk), and **α 1.5 is byte-for-byte α 1.0**. MAGENTA
+`(1, 0.15, 0.60)` at any alpha is magenta, and a zero channel stays zero. A stroke that must read
+WHITE is drawn with a WHITE **tint** (§12.4 makes that a per-part colour write), never with alpha —
+the conclusion the first draft reached by the wrong route, and the one place its number
+(`α 1.5`) should be read as "a WHITE tint at full gain". Anything tuned by eye before `b44b86d`
+was tuned against the squared curve and must be re-derived rather than reused. **(b) Brightness is
+order-independent** — `min(1, Σ)` in any order — so draw order never matters and "brighter reads as
+nearer" has no exceptions to manage.
 
 ### 7.2 Palette (fully saturated, black-is-room, suite-consistent)
 Linear stroke units as `Hud.kt` defines them; reuse the constants, add nothing off-suite.
@@ -752,6 +860,16 @@ Linear stroke units as `Hud.kt` defines them; reuse the constants, add nothing o
 glove during a tell, his head for 2 frames on a hit, the count. Everything else stays in hue. That
 is what "high-contrast telegraph" means on an additive display: not brighter, but the only white.
 Damage never dims to grey: he loses STROKES (crest spikes), never saturation.
+
+**And the rule that keeps that true once the figure has flat colour under it: when a part flashes
+WHITE, its OUTLINE goes up and its FILL goes DOWN (× 0.25).** Never flash a fill. Measured on the
+engine-exact desk renderer: a tell today is 1 723 whiteish pixels; with a fill present and the
+glove's fill left alone it is 1 754 (+1.8 %); with the glove's fill flashed white too it is 5 321
+(× 3.1), and a head hit becomes a 7 961-pixel white **egg** with the eyes, brows and crest lost
+inside it. Dimming the fill instead gives 1 548 px and reads as the comic's impact panel. The
+extend goes **hotter in its own hue** (× 1.3), never white. This matters more under LAW.md than it
+would have before: a frozen frame is on the glass for *seconds*, so a white slab that was
+forgivable for two frames at rate 0.35 is not forgivable at 0.03.
 
 ### 7.3 The boxer: a 2D stroke sprite, caricatured, billboarded
 A flat figure in its own X–Y plane, **1.9 m tall at 2.6 m** (40° of a 48°-tall plate: he fills
@@ -795,16 +913,20 @@ thumb bump.
   matrix at 60 Hz, so the figure never looks frozen on a held frame. The strip list is BOXER.md §8.
 - **Markers**: every frame carries named points — `glove_L`, `glove_R`, `chin`, `body`, `eye_L`,
   `eye_R`, `crown` — for the telegraph line's origin, the hit spark, your punch's target, the
-  stars and the motion trails (the last four `glove_*` positions on world time, drawn as fading
-  segments: speed lines with zero authoring, gone when time freezes).
+  stars and the motion trails (the last TEN `glove_*` positions on world time, drawn as
+  segments fading by AGE IN WORLD SECONDS: speed lines with zero authoring that **hang when time
+  freezes**, which is the whole point — LAW.md §8.1. The first draft faded them by rate and deleted
+  them under 0.35, i.e. it removed the one cue that makes a frozen projectile legible at exactly
+  the moment it becomes legible.)
 
 ### 7.4 The telegraph, in stroke terms — four beats, four channels
 1. **The flash** (strip event `telegraph`): the punching glove → WHITE α 1.5, its hatch → 1.0, both
    pupils → WHITE, ramped in over 30 ms real, held for the whole tell on world time. The one white
    thing on the glass.
-2. **The arc** (only while `timeScale < 0.35`): a 12-segment line from the `glove_*` marker to the
-   aim point on your inferred body, RED at α 0.4 × (1 − rate / 0.35), a WHITE bead (a 0.16 m cross
-   + a point) on the target. A still player reads a diagram; a moving one watches a weapon.
+2. **The arc** (only while `timeScale < 0.35`; the fade is now `α 0.4 × (1 − rate / 0.35)` with
+   the *floor* at 0.03 rather than 0.35, so it is at full strength through the whole frozen read):
+   a 12-segment line from the `glove_*` marker to the aim point on your inferred body, RED, a WHITE
+   bead (a 0.16 m cross + a point) on the target. A still player reads a diagram; a moving one watches a weapon.
 3. **The word** (`CAPTIONS ON`, the first two appearances of each attack only — the cabinet
    teaches, then shuts up): `< LEAN` / `LEAN >` / `DUCK` / `BLOCK` / `STEP` at `(320, 330)` sc 3.0,
    popping 0.5 → 3.0 over 80 ms real, held on world time until the strike, dropped over 120 ms;
@@ -823,9 +945,19 @@ Nothing strobes: every flash is a single ramp (attack 30 ms, hold, release) and 
 ### 7.5 The time law's look
 At the floor: the frozen frame + the arc + the word + **comic panel brackets** at the plate's four
 corners (L-shapes 40 px, inset 20 px, MAGENTA α 0.3) fading in over 200 ms real as the rate falls
-under 0.15 and out as it rises. The frozen fight is literally a panel. Time running (rate > 0.7):
-the idle sway doubles, the crowd's sway runs at full amplitude, the marker trails lengthen. The
-world is loud because you are.
+under `FREEZE_MARK` 0.15 and out as it rises. The frozen fight is literally a panel. Time running
+(rate > 0.7): contours thin, hatch off, the idle sway doubles, the crowd's sway runs at full
+amplitude, the trails stretch. The world is loud because you are.
+
+**One gate added, and it is not cosmetic (LAW.md §8.4).** Under the corrected law the frozen state
+is the DEFAULT, so a marker of the default state carries no information and the brackets become
+wallpaper. They come in only when rate < 0.15 **AND there is something to read** — a committed
+strike in flight, or a tell past its telegraph frame. That gate does a second job for free: the
+floor no longer snaps from 0.35 to 0.06 when he winds up, so the telegraph has lost its first
+beat, and the brackets arriving IS that beat.
+
+This is also the answer to the owner's request for comic-book colour, and the two requests share
+one mechanism: **the world becomes a drawn panel when it freezes and a smear when it runs.**
 
 ### 7.6 The player: green wireframe gloves on the plate
 Your gloves live in PLATE space (the ortho HUD batch), not in the world: they are your own hands
@@ -864,8 +996,8 @@ brighter is in front; black is nothing; the plate stays sparse because the world
 | Element | Position | Notes |
 |---|---|---|
 | Bezel | `rect(6,6,634,474)` @0.30, `rect(14,14,626,466)` @0.16 | the fight tint |
-| LEFT RAIL = THE PULSE | x 28, 62 → 418, r7 caps, r15 cross at 240 [on disk] | the vertical fill = `timeScale`: cyan at the floor to white-hot at 1.0; a tick at the floor; the 2 px white tick at 0.5 (the latency marker); `STILL` violet beside it after 1 s under 0.10. **The bar every standing test reads** |
-| RIGHT RAIL = THE REFLEX | x 612, 62 → 418 | full (RED) the instant a tell begins; drains through the hang and the fuse on REAL time; empty = the fuse has burned, he comes. Idle: dim BLUE outline |
+| LEFT RAIL = THE PULSE | x 28, 62 → 418, r7 caps, r15 cross at 240 [on disk] | the vertical fill = `timeScale`: cyan at the floor to white-hot at 1.0; a tick at the floor; the 2 px white tick at 0.5 (the latency marker) **and a second at `FREEZE_MARK` 0.15, which is now the crossing that matters**; **`FROZEN`** beside it after 1 s under 0.08 — an affirmative in ACID, not the old violet `STILL` scold, because at a 0.03 floor that is the intended state and not a warning. At rest the fill is a sliver, which reads correctly as "almost nothing". **The bar every standing test reads** |
+| RIGHT RAIL = THE REFLEX | x 612, 62 → 418 | **REPURPOSED (LAW.md §8.6): TIME-TO-IMPACT on the committed glove, on the WORLD clock** — full (RED) when the strike launches, draining as the glove closes, so it moves only when the world does and it gives the frozen frame a number. It also DRAWS the two declared real-time timers: the 0.6 s counter window and the stall, so every real clock left in the fight is one the player can see. ~~drains through the hang and the fuse~~ — both deleted. Idle: dim BLUE outline |
 | Opponent name | `(52, 46)` sc 2.2 MAGENTA | `THE ROOSTER` |
 | His HP bar | x 52 → 232, y 60 → 66, outline @0.5, fill from the LEFT | MAGENTA; RED under 25 %; the fill eases over 0.3 s real |
 | His knockdown pips | rings r 5 at `(58 / 74 / 90, 80)` | filled per knockdown this round; a fourth would be the KO |
@@ -927,27 +1059,57 @@ continuous contact.
 
 ### 9.3 The crowd is the rate meter — in REAL time
 The crowd bed is a looping noise layer whose volume and low-pass follow `timeScale` with a 200 ms
-lag: at the floor the arena is a held breath (a hush, 200 Hz low-passed), at rate 1 it is a roar.
-The owner will hear the world freeze without looking at a rail (TEST.md T5). On top: the hit sting,
-a boo after 3 real seconds of stillness while he is idle, the two-note `ROO-STER` chant when you
-have been hit twice without answering, the count spoken along from 5, the KO roar. The crowd's
-LOUDNESS is real time; the visual crowd's bob TEMPO is world time (it swings with the clock).
+lag: at the floor the arena is a held breath (a hush), at rate 1 it is a roar. The owner will hear
+the world freeze without looking at a rail (TEST.md T5).
 
-### 9.4 The voices — five speakers, two floors
-| Speaker | Track | Chain | Lines |
-|---|---|---|---|
-| ANNOUNCER (the ring announcer and the play-by-play) | `voice/` | the suite's ANNOUNCER chain (Zarvox slower → stadium band-pass + long echo, no crusher) — the institution | the intro, `left` / `right` / `body_blow` on every landed punch, `winner_ko`, `no_decision` |
-| REFEREE | `voice/` | the ANNOUNCER chain at rate 170, a shorter room | `ref_1`…`ref_10`, `fight`, `break` |
-| CORNER (your corner man) | `voice/` | the SYSTEM chain without the crusher, close-miked (no room) | `put_him_away`, `get_up`, `stick_and_move`, the tips (§10) |
-| ROOSTER | `voice_hero/` | a fish.audio render, or a macOS voice pitched −2 st with a slap room — the owner picks by ear (TEST.md D4) | `rise_and_shine` (the uppercut's tell), `wake_up`, `cluck`, `that_all` |
-| CROWD | `voice/` | six Zarvox renders detuned ±40 cents, offset 30–90 ms, summed | `chant`, `oh`, the count along |
+**The range was squeezed by the old floor and must be widened (LAW.md §9).** With the clock living
+between 0.35 and 1.0, `level = 0.25 + 0.75 × crowdLevel` was a 6 dB swing — audible, not a hush.
+Send **`level = 0.06 + 0.94 × crowdLevel`** (≈ 24 dB) and **`rate = 0.55 + 0.65 × crowdLevel`**.
+SoundPool has no filter, so bake the low-pass: generate a **second, darker crowd bed** in the
+existing synthesiser (the same `crowdbed` recipe with the saw partials removed and the noise shaped
+at 400 Hz) and crossfade the two on `crowdLevel`.
 
-Priority on the bus: the ROOSTER's crow is a TELEGRAPH and is `urgent` (it preempts anything); the
-REFEREE's count is urgent; the ANNOUNCER's punch calls are throwaway (patience 300 ms — a call that
-arrives late is worse than none); the CORNER's tip waits 3 s and only speaks in the corner; the
-crowd's spoken lines take whatever floor is free. Every line is logged `say[dir] id (ms)` as today.
-The line list, in the `STORY.md` table form `tools/extract_lines.py` parses, is BOXER.md §9; the
-`SPEAKERS` set in that script gains `REFEREE`, `CORNER` and `ROOSTER`.
+**And the crowd was the only thing in the mix that moved with the clock, which is why the frozen
+world never SOUNDED frozen.** Every cue that belongs to the WORLD — `EXTEND`, `STAMP`, `WHISTLE`,
+`TELL_PECK_L` / `_R`, `GUARD_THUD`, `WHIFF`, `STUN_WARBLE` — is now played at
+`pitch = clamp(0.5 + 0.5 × timeScale, 0.5, 1.0)`, which `Sfx.play(id, pitch, vol)` already forwards
+to `SoundPool` and clamps to 0.5–2.0. At the floor they are half-speed groans. The player's own
+sounds, the bell, the announcer, the referee, the crowd's LOUDNESS and the MUSIC all stay at 1.0
+(§9.5's ruling holds), and the contrast between a brass chart at tempo and a world groaning
+underneath it is the two-clock promise made audible.
+
+`Sfx.HANG` fired on entering the tell's hang, a state that no longer exists. It now fires on the
+rate **crossing DOWN through `FREEZE_MARK` 0.15 having been above 0.5**, rate-limited to one per
+real second: the sound of the world freezing, which under the corrected law happens dozens of times
+a round — exactly as often as the player should be reminded the mechanic is theirs.
+
+On top: the hit sting, a boo after 3 real seconds of stillness **while he is IDLE**, the two-note
+chant when you have been hit twice without answering, and the KO roar. ~~The count spoken along
+from 5~~ is impossible at runtime — `VoiceBus` allows one speaker at a time — and is **baked into
+`ref_5`…`ref_10` at render time** instead (VOICE.md §3). The visual crowd's bob TEMPO is world time;
+its LOUDNESS is real.
+
+### 9.4 The voices — MOVED to `docs/VOICE.md`
+The roster, the five verified ffmpeg chains, the separation law, the per-fighter keying, the
+referee's introductions and all **84 clips** are in `docs/VOICE.md`, which is the file
+`tools/extract_lines.py` parses. What was here was a five-speaker table for a one-boxer prototype;
+the card has five men now, so the fifth speaker is not a character but a **role — THE MAN IN THE
+RING** — and every line that depends on which of them is up is keyed `<stem>_<fighter.id>`.
+
+Four things from this section that survived and are still binding:
+
+- **Priority on the bus.** The man's crow is a TELEGRAPH and is `urgent`; the referee's count is
+  urgent; the announcer's punch calls are throwaway (patience 300 ms — a call that arrives late is
+  worse than none); the corner's tip waits and only speaks in the corner. Every line is logged
+  `say[dir] id (ms)`.
+- **`Voice.kt` is complete and correct as inherited** and needs exactly one addition,
+  `fun has(id) = durations.containsKey(id)`, surfaced on `GameHost`.
+- **`Lines.OH` is dead** — `Fight.onStrike` and `updateCount` already fire the synthesised
+  `Sfx.CROWD_OH`. Deleting it also stops the crowd competing with the announcer for the one bus.
+- **`extract_lines.py`'s `SPEAKERS` set must gain `REFEREE`, `CORNER` and `BOXER` in the same
+  commit as VOICE.md.** A row whose speaker is not in the set is skipped *silently*, so a `--check`
+  run against today's set reports 25 lines and passes, having thrown away three quarters of the
+  script.
 
 ### 9.5 Music
 **[changed — the owner's ruling: "change the music for something appropriate for the game"]** The
@@ -979,11 +1141,15 @@ The cabinet teaches by pattern, not by caption. Three teaching devices, in order
 2. **The feedback word** — every answer is named (`DODGE`, `PERFECT`, `GUARD`, `GLANCE`,
    `BLOCKED`, `WINDED`), so the player always knows what the game thinks they did.
 3. **The corner** — between rounds the corner man says ONE sentence chosen from what the player was
-   hit by most that round: `tip_peck` "Lean off the lit glove." · `tip_wing_r` "Gold crest, get
-   low." · `tip_wing_l` "Never duck the low one. Block it." · `tip_sunrise` "When he crows, get
-   off the line." · `tip_guard` "Your hands are wasted on his gloves. Dig the body." · `tip_still`
-   "Read him, then move. Standing still is not a plan." · `tip_step` "Don't punch and run." (after
-   three body steps rejected during pad blanks) · `tip_special` "The meter's lit. Both hands."
+   hit by most that round. **The texts are now `docs/VOICE.md` §6.3 and they are shorter**, because
+   `Clock.CORNER_T` is 2.2 s and the first draft's tips measured up to 4.3 s, which stretched the
+   rest to 5.35 s and made it a different length every round (§5.3). **And four of them name a
+   colour channel, which is exactly what the card varies**, so the corner speaks one of three
+   dialects — CREST, LIT, QUIET — chosen by `Fighter.tellDialect`: `tip_wing_r` says "Gold crest"
+   and only the Rooster has a crest, while Silk has no colour at all, so today's tips would
+   actively mislead on four of the five fights. `Lines.tip(stem, dialect, has)` tries
+   `stem + suffix` and falls back to the bare stem, so only three tips need variants and a sixth
+   fighter needs none.
 
 The intro (`INSERT COIN` → the announcer) is the only scripted speech in the prototype; the attract
 loop, the champion's belt and a second boxer are Phase 2.

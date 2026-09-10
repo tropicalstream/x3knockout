@@ -53,11 +53,11 @@ class Fighter(
     /** His HP by difficulty. The Rooster's 100/120/140 is the unit everything else is read against. */
     val hp: IntArray,
     /** Global timing, against the authored [Attack] numbers. Below 1 is faster and therefore harder. */
-    val tellMul: Float = 1f,
+    tellMul: Float = 1f,
     val strikeMul: Float = 1f,
-    val recoverMul: Float = 1f,
+    recoverMul: Float = 1f,
     /** What his punches cost you. */
-    val dmgMul: Float = 1f,
+    dmgMul: Float = 1f,
     /**
      * How long the world stays deep after his tell begins — the READ, in the player's real seconds,
      * as a multiple of the difficulty's `HANG_T`. This is the single kindest or cruellest number a
@@ -115,6 +115,12 @@ class Fighter(
      */
     val roundNames: Array<String> = arrayOf("ROUND ONE", "ROUND TWO", "THE LAST ROUND"),
 ) {
+    // The card's hardness is folded in HERE, once, so every reader of these three sees the tuned
+    // value and no call site can forget to apply it. The authored numbers stay readable above.
+    val tellMul: Float = tellMul / HARDER
+    val recoverMul: Float = recoverMul / HARDER
+    val dmgMul: Float = dmgMul * HARDER
+
     /** How many spikes the crest carries at full health; 0 means he has no crest to read. */
     val hasCrest: Boolean get() = colourTells && id == "rooster"
 
@@ -151,6 +157,24 @@ class Fighter(
     }
 
     companion object {
+        /**
+         * THE CARD'S HARDNESS, applied to every fighter at once — the owner played the Rooster and
+         * said the card was too easy, so this is one dial rather than twenty edited numbers.
+         *
+         * It is 20 % on the three things that ARE the difficulty of a boxer, and deliberately not
+         * on his health:
+         *   - his TELL is 20 % shorter, so you get less warning;
+         *   - his RECOVERY is 20 % shorter, so the opening you earned is smaller;
+         *   - his PUNCH costs 20 % more.
+         * Health is left alone because more HP does not make a fight harder, it makes it longer,
+         * and a boxing round that outlasts the player's neck is a worse game and not a harder one.
+         *
+         * It is a MULTIPLIER ON THE PROFILE rather than new numbers in each row, so the relationships
+         * the card was designed around — the Anvil telegraphs longer than the Sardine, Silk's
+         * openings are stingier than the Rooster's — all survive being turned up.
+         */
+        const val HARDER = 1.20f
+
         private val MAGENTA = floatArrayOf(1.00f, 0.15f, 0.60f)
         private val ORANGE = floatArrayOf(1.00f, 0.45f, 0.05f)
         private val GREEN = floatArrayOf(0.30f, 1.00f, 0.35f)

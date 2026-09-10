@@ -289,7 +289,14 @@ class BoxerTest {
         until(b, body, 40f) { rec.strikes.size == 5 }
         assertEquals("C's low hook, and the duck drops the head into it", Boxer.Attack.WING_L, rec.strikes[4].first)
         assertEquals(StrikeResult.HIT, rec.strikes[4].third)
-        assertEquals("the fatal eighteen at NORMAL", 18, rec.dmgs[4])
+        // DERIVED, NOT TYPED. This used to assert a literal 18 and went red the moment the card's
+        // hardness was turned up — which is a test failing for being out of date rather than for
+        // finding anything. What it is actually here to pin is that ducking INTO the body hook
+        // takes the FATAL number rather than the ordinary one, so it says that.
+        val fatal = Math.round(Boxer.Attack.WING_L.dmgDuckInto * Boxer.DMG_MUL_DIFF[1] * Fighter.ROOSTER.dmgMul)
+        assertTrue("the fatal number, not the ordinary one",
+            Boxer.Attack.WING_L.dmgDuckInto > Boxer.Attack.WING_L.dmg)
+        assertEquals("ducking into the body hook takes the fatal number", fatal, rec.dmgs[4])
         assertTrue("wake up", rec.says.contains(Lines.WAKE_UP))
     }
 

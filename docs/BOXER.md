@@ -5,6 +5,23 @@
 > the SUPERHOT VR mechanic is the game, and it does not get an exception for the moment that matters.
 > Columns headed `(real)` in the first draft now read `(world)`.
 
+> **AMENDED 2026-09-10 — `docs/LAW.md`, which outranks this file on the clock.** **He no longer
+> writes the floor.** `FLOOR_IDLE`, `FLOOR_DEEP`, `FLOOR_FUSE_TOP`, `FLOOR_OPEN`, `HANG_T`,
+> `FUSE_T`, `floorNow()`, `burnHangAndFuse()` and `Listener.onFuseBurned` are all deleted, and
+> everywhere below that says "the hang and the fuse stretch the tell for a still player", read
+> instead: **the player's own stillness stretches it, without limit, and nothing takes it back.**
+> A tell authored at 0.50 world seconds costs a moving player 0.50 real seconds and a perfectly
+> still one **16.7** — not the 2.1 the fuse used to impose. His numbers in §3 and §8 are unchanged;
+> what changed is that they are now the only clock on him.
+>
+> Two consequences that are easy to miss and are worked through below: the **stagger and every
+> guard-opening window shrink by 1.82** (§5), because a landed punch now costs 0.083 world seconds
+> instead of 0.150 and those windows are measured in punches; and the tell's **first beat has lost
+> its floor snap** (§3), because the floor no longer changes when he winds up — the picture and the
+> panel brackets have to carry it alone. His **pattern is denser** (`docs/CARD.md`,
+> "THE ROOSTER, MADE A FIGHT") and his **voice lines have moved** (`docs/VOICE.md`, which replaces
+> §9 below).
+
 
 
 The prototype's only opponent. Everything here is fitted to `docs/DESIGN.md` (the verbs, the time
@@ -79,9 +96,16 @@ DODGE SENSE MEDIUM.
 
 ## 3. THE MOVESET — five attacks, five telegraphs, five answers
 
-Times are ROUND 1 at rate 1.0 (a moving player); the hang and the fuse stretch the tell for a still
-one (DESIGN.md §2.2); §6 shortens them by round. The STRIKE is forced real time. Damage is on an
-open target; GUARD and GLANCE rules are DESIGN.md §4.1.
+Times are ROUND 1 at rate 1.0 (a moving player); a still player's own stillness stretches them
+without limit (LAW.md §3); §6 shortens them by round. The STRIKE is world time like everything
+else. Damage is on an open target; GUARD and GLANCE rules are DESIGN.md §4.1.
+
+**The tell's first beat.** It used to be the floor snapping from 0.35 to 0.06, and that snap had a
+sound. There is no snap any more — the floor was already 0.03 — so the whole of "he has started" is
+now carried by the picture: the pupil, the white glove, the shoulder, the strip's `telegraph`
+frame, the attack's own SFX **pitched down to the clock** (LAW.md §9), and the comic-panel brackets
+coming in, which are gated on exactly this (LAW.md §8.4). If a tell ever fails to read on-head,
+that gate is the first thing to look at.
 
 | # | name (his voice) | attack | TELL — the high-contrast telegraph | tell (world) | STRIKE (world) | band / what it hits | cheap answer | safe answers | fatal answer | RECOVER (world) |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -120,10 +144,12 @@ open target; GUARD and GLANCE rules are DESIGN.md §4.1.
 Neutral stance: both gloves up covering the face, drawn overlapping his jaw — the additive overlap
 makes the closed guard visibly BRIGHTER, which is the readable "closed" state for free. While it
 is up, head punches do 0, cost a heart and the full whiff-length `Forced.PUNCH`, and draw a cyan
-spark. The guard OPENS (DESIGN.md §4.3): on a BODY BLOW (0.6 s world in R1, 0.5 / 0.4 in R2 / R3;
-a second body blow inside it → STAGGER), on a PERFECT dodge (for the whole recover), on a
-GUARD-COUNTER (blocking #4), briefly (0.2 s world) at the end of every recover, and by the SPECIAL
-(0.8 s world). It re-closes on WORLD time — on your own punches.
+spark. The guard OPENS (DESIGN.md §4.3): on a BODY BLOW (**0.33 s** world in R1, **0.28 / 0.22** in
+R2 / R3; a second body blow inside it → STAGGER), on a PERFECT dodge (for the whole recover), on a
+GUARD-COUNTER (blocking #4, **0.33 s**), briefly (**0.11 s** world) at the end of every recover,
+and by the SPECIAL (**0.44 s** world). It re-closes on WORLD time — on your own punches, and those
+four numbers are the old ones divided by 1.82 for the reason set out in §5: they buy the same
+**four punches** they always did, now that a landed punch costs 0.083 world seconds.
 
 His health readout is the crest: 5 spikes at full, one lost per knockdown, the rest drooping with
 HP (spike angle = 90° × HP / max, minimum 40°). His HP bar on the scoreboard says the same thing in
@@ -141,10 +167,18 @@ to 1.6 s; a body blow wakes him.
 SPECIAL landing on an open guard; a blocked #4 followed by a body blow inside its window.
 **Look**: gloves at his hips, head wobbling ±20° at 3 Hz (the secondary matrix), eyes replaced by
 two 12-segment spirals, crest spikes crossed, tongue out — unmistakable at a glance. `STUN_WARBLE`
-loops. The floor sits at 0.12 (DESIGN.md §2.2).
-**Duration (world)**: R1 **0.9 s**, R2 0.7, R3 0.55; each landed punch EXTENDS it 0.12 s up to a
-cap (1.6 / 1.2 / 0.9). In punches: "about five taps, seven if you're clean." Measured in your
-punches, not in seconds: a still player watching a stagger loses nothing and gains nothing.
+loops, **pitched with the clock** (LAW.md §9), so a frozen stagger is audibly a frozen stagger.
+The floor does not change: it is 0.03, like everything else in the fight.
+**Duration (world)**: R1 **0.50 s**, R2 0.39, R3 0.30; each landed punch EXTENDS it **0.066 s** up
+to a cap (**0.88 / 0.66 / 0.50**). In punches: "about five taps, seven if you're clean." Measured
+in your punches, not in seconds: a still player watching a stagger loses nothing and gains nothing.
+
+> **Those numbers moved and the stagger did not.** A landed punch is cut at its contact frame,
+> 0.15 s of real time, and its forced rate fell from 1.00 to 0.55 (LAW.md §5): 0.150 world seconds
+> became **0.083**. Dividing the window by 1.82 keeps the stagger at **six taps**, which is what
+> this paragraph has always claimed. Leave the old 0.9 s in and the stagger becomes eleven taps and
+> the Rooster gets easier at the moment the owner asked for him to get harder. The same divisor
+> applies to all four `GUARD_OPEN_*` constants in §4 — LAW.md §6 has the full table.
 **Damage in stagger**: × 2. **A SPECIAL in stagger = a knockdown, and he does not rise** — "the
 Wake-Up Call puts him to sleep" (the announcer's line).
 **Leaving it**: he straightens with a shake (0.4 s world), guard up — and in R2+ his NEXT attack is
@@ -165,12 +199,23 @@ centred, hands busy.
 | tracking | none | none | the Sunrise's column follows `leanX` for the first 40 % of the strike; the answer is St, or a slip begun INSIDE the strike |
 | new sequence | — | the 1-2: #1 then #2 with a 0.2 s tell on the second | the DOUBLE WING: #3 then #4 back to back (0.2 s tell on #4): duck, then come up into a guard — or one step clears both (`STEP +400`) |
 | his HP at the bell | 120 | `max(current, 72)` | `max(current, 42)` |
-| stall pressure (real time, while he is IDLE) | crowd boos after 3 s still; nothing from him | after 3 s still his crest goes amber and his NEXT tell is 20 % shorter | after 2 s still he throws a HALF-PECK at real-time rate — the feint phase is a forced state (`Forced.STRIKE` 0.2 s), the one attack that ignores the law, and it is a feint: the punishment for standing is only that he closes distance and the round clock ticks 2 s |
+| stall pressure (real time, while he is IDLE **only**) | the crest goes AMBER over the last second, then the crowd boos at 3 s | the same, and his NEXT tell is 20 % shorter | the same, at 2 s, and his NEXT tell is **30 %** shorter |
 | after a STAGGER ends | (wait 0.6) → phrase D | (wait 0.4) → #5, always | #5-tracking immediately |
 | under 25 % HP | — | — | every wait halved; `cluck` before each phrase — his tell for "I'm desperate" |
 
 Reading it as a player: R1 is "one attack, one answer"; R2 is "the third flash is the truth"; R3 is
 "the crest never lies, the feet sometimes do, and the crow can be a lie once per lap."
+
+**THE STALL ROW CHANGED, AND THE CHANGE IS A RULING** (LAW.md §4.3). It stays on **real** seconds,
+`[3, 3, 2]`, because on world seconds 3 world s at rate 0.03 is a hundred real seconds and the boo
+would never arrive for the player it exists for. What makes a real clock legal here is the gate
+that is already in `Boxer.stall()`: it returns immediately unless `phase == Phase.IDLE`, so
+**a player reading a committed telegraph is never on a real clock** — the stall answers camping in
+neutral and nothing else. Two edits so it is watched rather than sprung: the amber crest arrives
+from **round 1** and over the last real second, before anything fires; and **R3's forced real-time
+half-peck is deleted.** That was the only hostile *action* in the game running on real time, it was
+a strike the player could not slow, and DESIGN.md §0.1 rule 4 forbids it. R3's answer becomes R2's
+with a 30 % cut instead of 20 % — his tell, on his clock, readable.
 
 ---
 
@@ -186,35 +231,46 @@ and nothing else.
 Notation: `#n` an attack; `(wait n)` a neutral pause of n world seconds with the guard up; `→`
 next; `[state]` a branch on the player's state at the end of the previous phrase; `FEINT` per §6.
 
-**Round 1 — THE STRUT** (teach each answer, one at a time, twice)
+**Round 1 — THE STRUT** (teach each answer, then ask for two of them in a row)
+*Rewritten 2026-09-10 for density — `docs/CARD.md`, "THE ROOSTER, MADE A FIGHT", carries the
+reasoning and the Kotlin. The tells are untouched; only the dead air and the phrase count moved.*
+
 | phrase | sequence | branch |
 |---|---|---|
-| A (opening, always first) | #1 (wait 1.2) #1 (wait 1.2) #2 (wait 1.2) #2 | [ducked either peck] → the next phrase is C (he saw you duck: here is a low hook) |
-| B | #3 (wait 1.5) #3 | [slipped into #3 and was hit] → repeat B once more (max twice), else → D |
-| C | #4 (wait 1.5) #4 | [ducked #4] → `wake_up` and repeat C (max twice) |
-| D | #1 #2 (wait 1.0) #5 | [still upright and centred after #2's recover] → #5 with a 0.5 s tell; [slipped during the recover] → #5 as the table |
-| E (only under 60 % HP) | #5 (wait 2.0) #5 | — |
-| loop | A once, then rotate B C D (E inserted after any phrase when eligible), 1.0 s neutral between phrases | after any STAGGER ends → (wait 0.6) → D |
+| A (opening, always first) | #1 (wait 0.6) #1 (wait 0.6) #2 (wait 0.6) #2 | [ducked either peck] → the next phrase is C (he saw you duck: here is a low hook) |
+| B | #3 (wait 0.7) #3 (wait 0.7) **#4** | [slipped into #3 and was hit] → repeat B once more (max twice), else → D |
+| C | #4 (wait 0.7) #4 (wait 0.7) **#3** | [ducked #4] → the "wake up" line and repeat C (max twice) |
+| D | #1 #2 (wait 0.5) #5 | [still upright and centred after #2's recover] → #5 with a 0.5 s tell; [slipped during the recover] → #5 as the table |
+| **F (new)** | **#2 (wait 0.6) #3 (wait 0.6) #4** | [guarded through all three] → **#5** — the punch the guard cannot stop, thrown at the player who just proved they would rather block than move |
+| E (only under 60 % HP) | #5 (wait 0.9) #5 | — |
+| loop | A once, then rotate **B C D F** (E inserted after any phrase when eligible), **0.5 s** neutral between phrases | after any STAGGER ends → (wait 0.6) → D |
+
+B and C now teach the wing pair as a **contrast inside one phrase** rather than as two drills: the
+crest is gold all three times, and what changes is its HEIGHT — fanned, fanned, drooped. F is the
+first thing in the game that asks for a different *kind* of answer twice in a row with no reset
+(lean, duck, block), and it is the phrase that turns R1 from a lesson into a fight. Four rotating
+phrases is also what `rotationFor()` has always shuffled: the pool was three, so one of its four
+slots was silently discarded on every round-1 seed.
 
 **Round 2 — THE RUFFLE** (chain and feint)
 | phrase | sequence | branch |
 |---|---|---|
-| A2 | #1 #2 (0.2 s tell on #2) (wait 1.0) #1 #2 | [blocked both] → FEINT(#1) → #2 into the lean |
+| A2 | #1 #2 (0.2 s tell on #2) (wait 0.6) #1 #2 | [blocked both] → FEINT(#1) → #2 into the lean |
 | B2 | FEINT(#1) (wait 0.3) → [slipped left] #2 / [slipped right] #4 / [ducked] #5 / [still or guarding] #3 | the feint teaches "wait for the third flash" |
-| C2 | #3 (wait 0.8) #4 | [ducked #4] → `wake_up` → #5 |
-| D2 | #4 (wait 0.6) #5 | [guard-countered #4] → he skips #5 and staggers 0.4 s instead |
-| E2 | #5 (wait 1.5) FEINT(#5, the cut crow) → [slipped] #3 into that side / [stepped] nothing (he lost you: 0.8 s open) / [ducked] #5 for real | the crow feint appears once per rotation |
-| loop | A2 once, then rotate B2 C2 D2 E2; after a STAGGER → (wait 0.4) → #5 | stall pressure per §6 |
+| C2 | #3 (wait 0.5) #4 | [ducked #4] → `wake_up` → #5 |
+| D2 | #4 (wait 0.4) #5 | [guard-countered #4] → he skips #5 and staggers 0.4 s instead |
+| E2 | #5 (wait 0.9) FEINT(#5, the cut crow) → [slipped] #3 into that side / [stepped] nothing (he lost you: 0.8 s open) / [ducked] #5 for real | the crow feint appears once per rotation |
+| loop | A2 once, then rotate B2 C2 D2 E2, 0.4 s neutral between phrases; after a STAGGER → (wait 0.4) → #5 | stall pressure per §6 |
 
 **Round 3 — THE COCKFIGHT** (everything, fast, tracking)
 | phrase | sequence | branch |
 |---|---|---|
-| A3 | #1 #2 #1 (0.15 s tells on the 2nd and 3rd) (wait 0.6) #5-tracking | [stepped] → (wait 1.0, he re-squares) / [slipped early] → the Sunrise follows and lands unless the slip began inside the strike |
+| A3 | #1 #2 #1 (0.15 s tells on the 2nd and 3rd) (wait 0.4) #5-tracking | [stepped] → (wait 1.0, he re-squares) / [slipped early] → the Sunrise follows and lands unless the slip began inside the strike |
 | B3 (DOUBLE WING) | #3 → #4 back to back (0.2 s tell on #4) | [ducked #3 then guarded #4] = the intended read; [stepped once] clears both, `STEP +400`; [stayed ducked] → 18 dmg and `wake_up` |
-| C3 | HALF-STAMP (nothing) (wait 0.4) #3 | teaches crest-over-feet |
+| C3 | HALF-STAMP (nothing) (wait 0.3) #3 | teaches crest-over-feet |
 | D3 | FEINT(#2) → [slipped right] #1 / [slipped left] #3 / [ducked] #5-tracking / [guarding] #4 / [stepped] 0.6 s open | — |
-| E3 | #5-tracking (wait 1.0) #5-tracking | [both stepped] → he is winded: 1.5 s open, the crest droops — the round-3 knockdown setup |
-| loop | A3 once, rotate B3 C3 D3 E3; after a STAGGER → #5-tracking immediately; under 25 % HP every wait is halved and `cluck` precedes each phrase | — |
+| E3 | #5-tracking (wait 0.6) #5-tracking | [both stepped] → he is winded: 1.5 s open, the crest droops — the round-3 knockdown setup |
+| loop | A3 once, rotate B3 C3 D3 E3, 0.3 s neutral between phrases; after a STAGGER → #5-tracking immediately; under 25 % HP every wait is halved and `cluck` precedes each phrase | — |
 
 **Authoring rule for the neck** (DESIGN.md §14): no phrase asks for two full ducks in a row, and
 across a rotation a full duck is needed at most once per ≈ 6 world seconds; the guard answers one
@@ -269,41 +325,30 @@ the plate (that is the punch-in).
 
 ---
 
-## 9. THE VOICE LINES
+## 9. THE VOICE LINES — MOVED
 
-In the `docs/STORY.md` table form `tools/extract_lines.py` parses (its `SPEAKERS` set gains
-`REFEREE`, `CORNER`, `ROOSTER`). ANNOUNCER / REFEREE / CORNER / CROWD render through the suite's
-Zarvox chains into `voice/` (m4a); the ROOSTER renders into `voice_hero/` (mp3) through a chain the
-owner picks by ear — a fish.audio voice, or a macOS voice pitched down two semitones with a slap
-room (TEST.md D4). Every line is short: the bus drops a late line rather than deliver it late.
+**The script now lives in `docs/VOICE.md`**, which is the file `tools/extract_lines.py` parses.
+Eighty-four clips across five speakers no longer belong in a document about one boxer, and the man
+in the ring is five men: every line that depends on which of them is up is keyed
+`<stem>_<fighter.id>` and resolved once per bout (VOICE.md §4), so adding a sixth fighter is a row
+in `Fighter.CARD` plus eight rows in a table and no Kotlin at all.
 
-| id | speaker | text | when |
-|---|---|---|---|
-| `intro_1` | ANNOUNCER | In the far corner. One hundred and twenty pounds. | the intro, over `taunt` |
-| `intro_2` | ANNOUNCER | Roy. The Rooster. Rudd. | the intro |
-| `intro_3` | ANNOUNCER | He'll tell you to rise and shine. Don't. | the intro |
-| `fight` | REFEREE | Fight. | the bell, every round |
-| `left` | ANNOUNCER | Left. | a landed left (throwaway, patience 300 ms) |
-| `right` | ANNOUNCER | Right. | a landed right |
-| `body_blow` | ANNOUNCER | Body blow. | a landed body blow |
-| `counter` | ANNOUNCER | Counter. | a COUNTER lands |
-| `rise_and_shine` | ROOSTER | Rise and shine! | THE SUNRISE's tell, 0 → 80 % of it; urgent |
-| `rise_cut` | ROOSTER | Rise— | the false crow (R3); urgent |
-| `wake_up` | ROOSTER | Wake up. | after landing a hit; after a ducked #4 |
-| `cluck` | ROOSTER | Cluck-cluck. | the stall taunt; before each phrase under 25 % HP |
-| `that_all` | ROOSTER | That all you got? | a punch on his closed guard, at most once per 6 s |
-| `put_him_away` | CORNER | Put him away! | the KO meter crosses 26 |
-| `stick_and_move` | CORNER | Stick and move. | the crowd's boo (3 s still, R1) |
-| `get_up` | CORNER | Get up. Get up! | the player's count, at 4 |
-| `tip_peck` / `tip_wing_r` / `tip_wing_l` / `tip_sunrise` / `tip_guard` / `tip_still` / `tip_step` / `tip_special` | CORNER | Lean off the lit glove. / Gold crest, get low. / Never duck the low one. Block it. / When he crows, get off the line. / Your hands are wasted on his gloves. Dig the body. / Read him, then move. Standing still is not a plan. / Don't punch and run. / The meter's lit. Both hands. | the corner, one per rest, chosen by what hit you most |
-| `ref_1` / `_2` / `_3` / `_4` / `_5` / `_6` / `_7` / `_8` / `_9` / `_10` | REFEREE | One. / Two. / Three. / Four. / Five. / Six. / Seven. / Eight. / Nine. / Ten. | the count; urgent |
-| `chant` | CROWD | Roo-ster! Roo-ster! | hit twice without answering |
-| `oh` | CROWD | Oh! | a landed punch (the six-voice burst) |
-| `knockdown` | ANNOUNCER | Down goes the Rooster. | his knockdown |
-| `sleep` | ANNOUNCER | The Wake-Up Call puts him to sleep. | a SPECIAL in stagger |
-| `winner_ko` | ANNOUNCER | And the winner, by knockout. The challenger. | the KO card |
-| `no_decision` | ANNOUNCER | Time. No decision. | the end of round 3 without a KO |
-| `end_of_line` | ANNOUNCER | End of line. | QUIT (the suite's sign-off; recycled) |
+Three facts belong here rather than there, because they are facts about **this boxer**:
 
-The announcer calls EVERY landed punch, as the cabinet did — it is the game advertising itself in a
-loud room — and the calls are the first lines dropped when the bus is busy.
+- **The crow is the Sunrise's only audio tell.** `Attack.SUNRISE` carries `tellSfx = -1`
+  (`Boxer.kt` line 278 — "the Sunrise is crowed, not played"), so if `crow_<id>` is missing, a
+  25-damage unblockable arrives with no sound at all. That is why resolution falls back to the
+  Rooster's clip rather than to silence, why the crow is `urgent` on the bus, and why
+  `render_voices.py --check-lengths` caps every crow at **1000 ms**: it has to finish inside the
+  tell it is announcing.
+- **His crow is `crow_rooster`, "Rise and shine!", and the false crow `crow_cut_rooster`.** The old
+  ids `rise_and_shine` / `rise_cut` are gone; `Boxer.kt` now speaks in **stems**
+  (`Lines.Him.CROW`, `CROW_CUT`, `HIT`, `TAUNT`, `GUARD`) and never names a clip, which is the seam
+  that keeps this class ignorant of the card.
+- **The old `wake_up`, `cluck` and `that_all` are `hit_rooster`, `taunt_rooster` and
+  `guard_rooster`.** Every `Lines.WAKE_UP` in the pattern tables of §7 becomes `Lines.Him.HIT`, and
+  the stall's `Lines.CLUCK` becomes `Lines.Him.TAUNT`.
+
+The announcer still calls EVERY landed punch, as the cabinet did — it is the game advertising
+itself in a loud room — and those calls are still the first lines the bus drops when it is busy
+(patience 300 ms: a call that arrives late is worse than no call).

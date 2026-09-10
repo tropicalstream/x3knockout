@@ -1,0 +1,698 @@
+{
+ "lines": [
+  {
+   "id": "intro_rooster",
+   "speaker": "ANNOUNCER",
+   "text": "Roy, the Rooster, Rudd!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "intro_sardine",
+   "speaker": "ANNOUNCER",
+   "text": "Sal, the Sardine, Marino!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "intro_anvil",
+   "speaker": "ANNOUNCER",
+   "text": "Duke, the Anvil, Odell!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "intro_silk",
+   "speaker": "ANNOUNCER",
+   "text": "Sorensen. Silk.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "intro_metronome",
+   "speaker": "ANNOUNCER",
+   "text": "Your champion. Max, the Metronome, Voss!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "left",
+   "speaker": "ANNOUNCER",
+   "text": "Left.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "right",
+   "speaker": "ANNOUNCER",
+   "text": "Right.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "body_blow",
+   "speaker": "ANNOUNCER",
+   "text": "Body blow.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "counter",
+   "speaker": "ANNOUNCER",
+   "text": "Counter.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "down_rooster",
+   "speaker": "ANNOUNCER",
+   "text": "Down goes the Rooster!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "down_sardine",
+   "speaker": "ANNOUNCER",
+   "text": "Down goes the Sardine!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "down_anvil",
+   "speaker": "ANNOUNCER",
+   "text": "Down goes the Anvil!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "down_silk",
+   "speaker": "ANNOUNCER",
+   "text": "Down goes Silk!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "down_metronome",
+   "speaker": "ANNOUNCER",
+   "text": "Down goes the Metronome!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "sleep",
+   "speaker": "ANNOUNCER",
+   "text": "That one put him to sleep.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "winner_ko",
+   "speaker": "ANNOUNCER",
+   "text": "Winner, by knockout. The challenger!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "winner_tko",
+   "speaker": "ANNOUNCER",
+   "text": "Stopped. Technical knockout.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "winner_belt",
+   "speaker": "ANNOUNCER",
+   "text": "And the new champion!",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "no_decision",
+   "speaker": "ANNOUNCER",
+   "text": "Time. No knockout. No decision.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "end_of_line",
+   "speaker": "ANNOUNCER",
+   "text": "That's the card. Good night.",
+   "recycled": false,
+   "section": "6.1 ANNOUNCER"
+  },
+  {
+   "id": "ref_instr",
+   "speaker": "REFEREE",
+   "text": "Obey my commands at all times.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_protect",
+   "speaker": "REFEREE",
+   "text": "Protect yourself at all times.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_touch",
+   "speaker": "REFEREE",
+   "text": "Touch gloves.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_box",
+   "speaker": "REFEREE",
+   "text": "Box!",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_break",
+   "speaker": "REFEREE",
+   "text": "Break! To your corners.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_work",
+   "speaker": "REFEREE",
+   "text": "Box! Let's work.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_neutral",
+   "speaker": "REFEREE",
+   "text": "Neutral corner.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_stop",
+   "speaker": "REFEREE",
+   "text": "That's three. I'm stopping it.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_time",
+   "speaker": "REFEREE",
+   "text": "Time!",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_1",
+   "speaker": "REFEREE",
+   "text": "One.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_2",
+   "speaker": "REFEREE",
+   "text": "Two.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_3",
+   "speaker": "REFEREE",
+   "text": "Three.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_4",
+   "speaker": "REFEREE",
+   "text": "Four.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_5",
+   "speaker": "REFEREE",
+   "text": "Five.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_6",
+   "speaker": "REFEREE",
+   "text": "Six.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_7",
+   "speaker": "REFEREE",
+   "text": "Seven.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_8",
+   "speaker": "REFEREE",
+   "text": "Eight.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_9",
+   "speaker": "REFEREE",
+   "text": "Nine.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "ref_10",
+   "speaker": "REFEREE",
+   "text": "Ten.",
+   "recycled": false,
+   "section": "6.2 REFEREE"
+  },
+  {
+   "id": "put_him_away",
+   "speaker": "CORNER",
+   "text": "Put him away!",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "get_up",
+   "speaker": "CORNER",
+   "text": "Get up!",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "stick_and_move",
+   "speaker": "CORNER",
+   "text": "Stick and move.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_peck",
+   "speaker": "CORNER",
+   "text": "Lean off the lit glove.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_peck_quiet",
+   "speaker": "CORNER",
+   "text": "Lean off his shoulder.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_wing_r",
+   "speaker": "CORNER",
+   "text": "Gold crest. Duck.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_wing_r_lit",
+   "speaker": "CORNER",
+   "text": "Gold glove. Duck.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_wing_r_quiet",
+   "speaker": "CORNER",
+   "text": "Back foot plants. Duck.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_wing_l",
+   "speaker": "CORNER",
+   "text": "Block the low one.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_sunrise",
+   "speaker": "CORNER",
+   "text": "He crows. Get off the line.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_sunrise_lit",
+   "speaker": "CORNER",
+   "text": "He calls it. Get off the line.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_sunrise_quiet",
+   "speaker": "CORNER",
+   "text": "Hands drop. Get off the line.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_guard",
+   "speaker": "CORNER",
+   "text": "Forget his gloves. Body.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_still",
+   "speaker": "CORNER",
+   "text": "Read him, then move.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_step",
+   "speaker": "CORNER",
+   "text": "Don't punch and run.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "tip_special",
+   "speaker": "CORNER",
+   "text": "Meter's lit. Both hands.",
+   "recycled": false,
+   "section": "6.3 CORNER"
+  },
+  {
+   "id": "chant_rooster",
+   "speaker": "CROWD",
+   "text": "Roo ster! Roo ster!",
+   "recycled": false,
+   "section": "6.4 CROWD"
+  },
+  {
+   "id": "chant_sardine",
+   "speaker": "CROWD",
+   "text": "Sar dine! Sar dine!",
+   "recycled": false,
+   "section": "6.4 CROWD"
+  },
+  {
+   "id": "chant_anvil",
+   "speaker": "CROWD",
+   "text": "An vil! An vil!",
+   "recycled": false,
+   "section": "6.4 CROWD"
+  },
+  {
+   "id": "chant_silk",
+   "speaker": "CROWD",
+   "text": "Silk! Silk!",
+   "recycled": false,
+   "section": "6.4 CROWD"
+  },
+  {
+   "id": "chant_metronome",
+   "speaker": "CROWD",
+   "text": "Voss! Voss!",
+   "recycled": false,
+   "section": "6.4 CROWD"
+  },
+  {
+   "id": "crow_rooster",
+   "speaker": "BOXER",
+   "text": "Rise and shine!",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_cut_rooster",
+   "speaker": "BOXER",
+   "text": "Rise.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "hit_rooster",
+   "speaker": "BOXER",
+   "text": "Wake up.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "taunt_rooster",
+   "speaker": "BOXER",
+   "text": "Cluck, cluck.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "guard_rooster",
+   "speaker": "BOXER",
+   "text": "That all you got?",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_sardine",
+   "speaker": "BOXER",
+   "text": "Here it comes!",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_cut_sardine",
+   "speaker": "BOXER",
+   "text": "Here it.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "hit_sardine",
+   "speaker": "BOXER",
+   "text": "Told you.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "taunt_sardine",
+   "speaker": "BOXER",
+   "text": "Come on!",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "guard_sardine",
+   "speaker": "BOXER",
+   "text": "Nope. Nope.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_anvil",
+   "speaker": "BOXER",
+   "text": "Timber.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_cut_anvil",
+   "speaker": "BOXER",
+   "text": "Tim.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "hit_anvil",
+   "speaker": "BOXER",
+   "text": "Sit down.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "taunt_anvil",
+   "speaker": "BOXER",
+   "text": "Any time.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "guard_anvil",
+   "speaker": "BOXER",
+   "text": "My turn.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_silk",
+   "speaker": "BOXER",
+   "text": "Hup.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_cut_silk",
+   "speaker": "BOXER",
+   "text": "Hup.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "hit_silk",
+   "speaker": "BOXER",
+   "text": "Mm.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "guard_silk",
+   "speaker": "BOXER",
+   "text": "No.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_metronome",
+   "speaker": "BOXER",
+   "text": "Now.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "crow_cut_metronome",
+   "speaker": "BOXER",
+   "text": "No.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "hit_metronome",
+   "speaker": "BOXER",
+   "text": "On the beat.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "taunt_metronome",
+   "speaker": "BOXER",
+   "text": "Tick.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "guard_metronome",
+   "speaker": "BOXER",
+   "text": "Late.",
+   "recycled": false,
+   "section": "6.5 THE MAN IN THE RING"
+  },
+  {
+   "id": "intro_1",
+   "speaker": "ANNOUNCER",
+   "text": "Ladies and gentlemen.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "intro_2",
+   "speaker": "ANNOUNCER",
+   "text": "Three rounds of boxing.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "intro_3",
+   "speaker": "ANNOUNCER",
+   "text": "Seconds out.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "fight",
+   "speaker": "REFEREE",
+   "text": "Box!",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "knockdown",
+   "speaker": "ANNOUNCER",
+   "text": "Down!",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "oh",
+   "speaker": "CROWD",
+   "text": "Ohh.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "chant",
+   "speaker": "CROWD",
+   "text": "Knock him out.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "cluck",
+   "speaker": "BOXER",
+   "text": "Hah.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "that_all",
+   "speaker": "BOXER",
+   "text": "Is that all?",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "wake_up",
+   "speaker": "BOXER",
+   "text": "Wake up.",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "rise_and_shine",
+   "speaker": "BOXER",
+   "text": "Rise and shine!",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  },
+  {
+   "id": "rise_cut",
+   "speaker": "BOXER",
+   "text": "Rise and—",
+   "recycled": false,
+   "section": "The base ids the engine asks for"
+  }
+ ],
+ "by_speaker": {
+  "ANNOUNCER": {
+   "total": 24,
+   "recycled": 0
+  },
+  "REFEREE": {
+   "total": 20,
+   "recycled": 0
+  },
+  "CORNER": {
+   "total": 16,
+   "recycled": 0
+  },
+  "CROWD": {
+   "total": 7,
+   "recycled": 0
+  },
+  "BOXER": {
+   "total": 29,
+   "recycled": 0
+  }
+ }
+}

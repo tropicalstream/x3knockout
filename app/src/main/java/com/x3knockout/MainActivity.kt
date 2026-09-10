@@ -420,7 +420,19 @@ class MainActivity : Activity(), GameHost {
 
     override fun sfx(id: Int, pitch: Float, vol: Float) = sfx.play(id, pitch, vol)
     override fun crowd(level: Float, rate: Float) = sfx.crowd(level, rate)
-    override fun say(id: String, urgent: Boolean, patienceMs: Long) = voice.say(id, urgent, patienceMs)
+    /**
+     * HIS OWN VOICE IF HE HAS ONE. The card's five men share the line IDS but not always the line:
+     * the script renders `chant_anvil`, `hit_silk`, `crow_metronome` and so on, and asking for
+     * `chant` while the Anvil is in the ring should get the Anvil's. The manifest is the authority
+     * — a variant that was never rendered simply is not in it, and the base plays — so a fighter
+     * gains a voice by having clips rendered for him and nothing in the code changes.
+     */
+    private fun forFighter(id: String): String {
+        val v = id + "_" + game.fighter.id
+        return if (voice.durations.containsKey(v) || hero.durations.containsKey(v)) v else id
+    }
+
+    override fun say(id: String, urgent: Boolean, patienceMs: Long) = voice.say(forFighter(id), urgent, patienceMs)
     override fun sayAll(ids: List<String>) = voice.sayAll(ids)
     override fun stopVoice() { voice.stop(); refreshDuck() }
     override fun hero(id: String, urgent: Boolean, patienceMs: Long) = hero.say(id, urgent, patienceMs)
