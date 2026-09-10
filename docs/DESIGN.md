@@ -242,6 +242,30 @@ The full script is `docs/VOICE.md` §6.6, and `CareerTest` is the proof that the
 
 ---
 
+## 0.25 THE CROWD — the room comes over to your side (the owner, 2026-09-10)
+
+> *"there should be more cheering effects."*
+
+**EVERYTHING THE CROWD DID WAS AGAINST THE PLAYER.** It chanted the other man's name, it went OH
+when you were hit, it booed you for standing still. That was right for a cabinet with one
+opponent and wrong for a card you climb: nobody in the building was ever on your side, and a rise
+nobody cheers is not a rise.
+
+Four clips (VOICE.md §6.4.1) and one float. `cheer` on a counter, a special or a stagger; `roar`
+when he goes down; **`chant_you` — the same voices that were chanting his name a round ago,
+chanting yours** — on three of yours landed unanswered, the same threshold his chant uses, off
+the player's side of the same counter; and `clap` when the KO meter lights, which is a chant and
+not applause, because it fires the moment *before* something happens.
+
+**A CHEER IS SOMETHING THE PLAYER SEES.** `Fight.crowdSurge` is 0..1, raised by `cheerUp()` — the
+one place the crowd is raised, so no call site can cheer without the picture following — and
+decaying on REAL time, because the crowd is outside the fight the way the referee is. The
+renderer reads it into the wave's amplitude (+0.16), the crowd's brightness (+0.35) and the front
+row's bounce. On a stroke renderer with no faces, a crowd that only ever changes volume is a
+crowd nobody notices.
+
+---
+
 ## 0.3 HIS FEET — footwork, and out-fighting (the owner, 2026-09-10)
 
 > *"make sure opposing boxers have footwork (or lateral movement), and the tactical style built
@@ -836,7 +860,48 @@ draw a cyan spark at his glove with "That all you got?" at most once per 6 s rea
 The guard re-closes on WORLD time, so it closes exactly as fast as you spend time punching: **the
 guard closes on your own punches.**
 
-### 4.3.2 THE LOW GUARD — his elbows (2026-09-10)
+### 4.3.2 THE LOW GUARD — his ribs, and how they are earned (2026-09-10, second pass)
+
+> **THE FIRST PASS WAS NOT ENOUGH and the owner said so: *"the torso defense from opposing boxers
+> still needs to improve."*** He was right, and the hole was one clause. The ribs were **open by
+> default** — `IDLE -> tuckLeft <= 0f` — so the elbows only ever came in AFTER a body blow had
+> already landed. A cold neutral gave the first shot away free, and because a head punch brought
+> the elbows back out, **BODY–HEAD–BODY–HEAD ran forever at one free body blow every second
+> punch**, for no read and no risk. The elbows were a cooldown, not a guard. What follows is the
+> model that replaced it; the table below it survives unchanged.
+
+**THE RIBS ARE SHUT, exactly as the chin is, and they have to be EARNED.** Two levers, and the
+player picks:
+
+| lever | what it costs | what it is |
+|---|---|---|
+| **PUNCH HIGH** (`Fighter.lowBlows`) | a heart per punch | head punches that reach his gloves — landed or blocked, it is the same motion — make him cover up, and covering up takes his elbows off his ribs. The oldest combination in boxing, and the fast route. |
+| **DIG** (`Fighter.digs`) | a heart per punch | body punches into closed elbows are refused, but BANKED; enough of them force them apart. Slower, and it needs no opening at all — it is the answer for the man whose chin you cannot reach. |
+
+Either opens the ribs for `BODY_OPEN` (0.6 / 0.5 / 0.4 world seconds by round, × `openMul` ×
+`lowMul`). A body blow that then lands does what it always did — full damage, and **it opens the
+HEAD guard**, which is the key §4.2 is built on — and **shuts the ribs behind it**. Two body blows
+in a row are still impossible, the stagger is still BODY–HEAD–BODY, and every number in the
+stagger rule is still untouched. What changed is that the first one is no longer a gift.
+
+| | lowBlows | digs | what it makes him |
+|---|---|---|---|
+| THE ROOSTER | 1 | 3 | the grammar: one upstairs and the ribs are there |
+| THE SARDINE | 1 | 2 | a flyweight has no weight to cover with — downstairs is still his hole |
+| THE ANVIL | 2 | 5 | the wall, and the point of both passes: the body was how you skipped his lesson |
+| SILK | 1 | 4 | the Rooster's levers behind `openMul` 0.80, and you cannot SEE any of it |
+| THE METRONOME | 1 | 4 | the tightest window on the card once his 0.70 is applied |
+
+**THE CUE IS THE OPENING, NOT THE COVERING.** The first pass lit his forearms while his elbows
+were in, which was right when being covered was the event; the ribs are shut by default now, so
+that light would be on almost permanently — and a light that is always on is not a light. The
+grammar is the telegraph glove's instead: **the target lights up when it is available.** The
+trunks' hatch goes hot the instant the ribs open and out the instant somebody hits them. While
+they are shut, the forearms carry the WORK — they warm toward white in proportion to how close
+the player is to forcing them apart by either lever, which is the one number the player most
+needs and has no other way to see.
+
+### 4.3.3 The first pass, for the record
 
 **ONE PAIR OF ARMS, TWO THINGS TO COVER.** The gloves are up at his jaw and the elbows are down at
 his ribs, and what drives one into place takes the other out of it. That is the whole model, and

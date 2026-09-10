@@ -144,6 +144,11 @@ object Lines {
     // CROWD
     const val CHANT = "chant"
     const val OH = "oh"
+    // THE CROWD ON YOUR SIDE (VOICE.md 6.4.1): everything above this line is the room against you.
+    const val CHEER = "cheer"
+    const val ROAR = "roar"
+    const val CHANT_YOU = "chant_you"
+    const val CLAP = "clap"
     // THE ROOSTER (voice_hero/)
     const val RISE_AND_SHINE = "rise_and_shine"
     const val RISE_CUT = "rise_cut"

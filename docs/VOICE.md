@@ -405,6 +405,30 @@ the last column (§7.3).
 
 The Metronome's chant is his **surname**: a crowd chants two syllables, never "MET-RO-NOME".
 
+### 6.4.1 THE CROWD COMES OVER TO YOUR SIDE (2026-09-10)
+
+> *"there should be more cheering effects."*
+
+Everything above is the crowd **against** the player: it chants the other man's name, it goes OH
+when you are hit, it boos you for standing still. That was right for a cabinet with one opponent
+and wrong for a card you climb — nobody in the building was ever on your side, and a rise nobody
+cheers is not a rise. Four clips, and they are the other half of the room.
+
+| id | speaker | text | when | urg | pat |
+|---|---|---|---|---|---|
+| `cheer` | CROWD | Yeah! | you land a counter, a special, or fold him into a stagger | no | 900 |
+| `roar` | CROWD | Ohhh! Yeah! | he goes down | yes | — |
+| `chant_you` | CROWD | Co lum bia! Co lum bia! | three of yours land unanswered | no | 2000 |
+| `clap` | CROWD | Hey! Hey! Hey! | the KO meter lights | no | 1500 |
+
+`chant_you` is the mirror of `chant_<fighter>` and it is the one the whole career is for: the
+same voices that were chanting the other man's name a round ago, chanting yours. It fires on the
+same threshold his does (three unanswered), off the player's side of the same counter.
+
+**`clap` is a chant, not applause.** Applause is what a crowd does when something is finished;
+this fires when the meter lights, which is the moment before something happens, and a room in
+that state is stamping and shouting rather than clapping politely.
+
 ## 6.5 THE MAN IN THE RING
 
 | id | speaker | text | when | urg | pat | ms |

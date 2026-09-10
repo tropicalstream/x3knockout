@@ -421,6 +421,34 @@
    "section": "6.4 CROWD"
   },
   {
+   "id": "cheer",
+   "speaker": "CROWD",
+   "text": "Yeah!",
+   "recycled": false,
+   "section": "6.4.1 THE CROWD COMES OVER TO YOUR SIDE (2026-09-10)"
+  },
+  {
+   "id": "roar",
+   "speaker": "CROWD",
+   "text": "Ohhh! Yeah!",
+   "recycled": false,
+   "section": "6.4.1 THE CROWD COMES OVER TO YOUR SIDE (2026-09-10)"
+  },
+  {
+   "id": "chant_you",
+   "speaker": "CROWD",
+   "text": "Co lum bia! Co lum bia!",
+   "recycled": false,
+   "section": "6.4.1 THE CROWD COMES OVER TO YOUR SIDE (2026-09-10)"
+  },
+  {
+   "id": "clap",
+   "speaker": "CROWD",
+   "text": "Hey! Hey! Hey!",
+   "recycled": false,
+   "section": "6.4.1 THE CROWD COMES OVER TO YOUR SIDE (2026-09-10)"
+  },
+  {
    "id": "crow_rooster",
    "speaker": "BOXER",
    "text": "Rise and shine!",
@@ -806,7 +834,7 @@
    "recycled": 0
   },
   "CROWD": {
-   "total": 7,
+   "total": 11,
    "recycled": 0
   },
   "BOXER": {

@@ -316,9 +316,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val ovation = fight.state == State.KO || fight.state == State.KNOCKDOWN_COUNT
         val title = fight.state == State.TITLE
         // the crowd: the wave's amplitude and alpha from the crowd meter (the lagged rate); the ovation at 0.2 / 0.6
-        val crowdAmp = if (ovation) 0.20f else 0.02f + 0.10f * crowdLevel
-        val crowdK = if (title) 0.13f else if (ovation) 0.60f else 0.25f + 0.35f * crowdLevel
-        val bounce = if (ovation) 0.05f else 0f
+        // THE SURGE (VOICE.md §6.4.1): a cheer is something the player SEES. It rides on top of
+        // the bed rather than replacing it, so a shout during a quiet round reads as the room
+        // coming up rather than as the meter jumping.
+        val surge = fight.crowdSurge
+        val crowdAmp = (if (ovation) 0.20f else 0.02f + 0.10f * crowdLevel) + 0.16f * surge
+        val crowdK = (if (title) 0.13f else if (ovation) 0.60f else 0.25f + 0.35f * crowdLevel) + 0.35f * surge
+        val bounce = if (ovation) 0.05f else 0.045f * surge
         // the ring: the knockdown's shake (a decaying impulse computed here, spatial phase only), the multiplier's glow, the clapper's pulse
         val ringAmp = if (ropeShakeT in 0f..RING_SHAKE_T) 0.05f * exp(-ropeShakeT / 0.12f) * cos(ropeShakeT * 2f * PI.toFloat() * 9f) else 0f
         var ringGlow = if (title) 0.42f else 1f + (fight.multiplier - 1).coerceIn(0, 3) / 3f * 0.667f
@@ -890,29 +894,45 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     }
 
     /**
-     * HIS ELBOWS, DRAWN (`Boxer.TUCK_BODY`). While the low guard is in, the two forearms and the
-     * trunks' hatch come UP a step; when it goes, they drop back. That is the only cue there is
-     * for the lane the player is about to throw into, and `Boxer.lowOpen` deliberately leads the
-     * rule by `TUCK_SET_T`, so the picture says THROW NOW rather than THROW A MOMENT AGO.
+     * HIS RIBS, DRAWN (`Boxer.BODY_OPEN`) — and the cue is the OPENING now, not the covering.
      *
-     * WHY THE COLOUR IS MIXED TOWARD WHITE. Hue alone is a weak signal at 2.6 m on an additive
-     * renderer: the Rooster's gloves are RED on a MAGENTA body and the Anvil's are GOLD on
-     * ORANGE, so "the forearms went glove-coloured" is nearly invisible on two of the five. The
-     * 0.35 white mix buys a LUMINANCE step instead, which works for every palette on the card.
+     * The first pass lit his forearms while his elbows were in, which was right when the ribs
+     * were open by default and being covered was the event. They are shut by default now, so
+     * that cue would have been on almost permanently, and a light that is always on is not a
+     * light. The grammar is the same as the telegraph glove instead: **the target lights up when
+     * it is available.** The trunks' hatch goes hot the moment the ribs are open, and goes out
+     * the instant somebody hits them.
      *
-     * Silk is the exception and it is his character: this is called from inside his early-out
-     * with everything else zeroed, so his elbows are exactly as unreadable as his eyes. The
-     * information is still there in the pose; he simply will not hand it to you in light.
+     * WHILE THEY ARE SHUT the forearms carry the WORK: they warm toward white in proportion to
+     * how close the player is to forcing them apart, by either lever. That is the one number the
+     * player most needs and has no other way to see — "am I getting anywhere" — and it costs a
+     * mix on two parts that are already bound.
+     *
+     * The mix is toward WHITE rather than a hue because hue alone is weak at 2.6 m on an
+     * additive renderer: the Rooster's gloves are RED on a MAGENTA body and the Anvil's are GOLD
+     * on ORANGE. Luminance works for all five palettes.
+     *
+     * Silk is the exception and it is his character: called from inside his early-out with
+     * everything else zeroed, so his ribs are exactly as unreadable as his eyes.
      */
     private fun lowGuardTint(b: Boxer, f: Fighter, gain: Float) {
-        if (b.lowOpen || !f.colourTells) return
+        if (!f.colourTells) return
+        if (b.lowOpen) {
+            // THE TARGET IS AVAILABLE. The same grammar as the telegraph glove, pointed the
+            // other way: his hatch goes hot, and it goes out the moment anybody hits it.
+            material.set(pHatchTrunks, WHITE, HATCH_BLOCK * LOW_OPEN_K * gain)
+            return
+        }
+        val k = b.bodyWork
+        if (k <= 0.01f) return
         val g = f.glove
-        val r = g[0] + (WHITE[0] - g[0]) * LOW_MIX
-        val gr = g[1] + (WHITE[1] - g[1]) * LOW_MIX
-        val bl = g[2] + (WHITE[2] - g[2]) * LOW_MIX
-        material.set(pFarmL, r, gr, bl, LOW_GAIN * gain)
-        material.set(pFarmR, r, gr, bl, LOW_GAIN * gain)
-        material.gain(pHatchTrunks, HATCH_BLOCK * LOW_HATCH_K * gain)
+        val mix = LOW_MIX * k
+        val r = g[0] + (WHITE[0] - g[0]) * mix
+        val gr = g[1] + (WHITE[1] - g[1]) * mix
+        val bl = g[2] + (WHITE[2] - g[2]) * mix
+        val a = (1f + (LOW_GAIN - 1f) * k) * gain
+        material.set(pFarmL, r, gr, bl, a)
+        material.set(pFarmR, r, gr, bl, a)
     }
 
     private fun mixR(a: FloatArray, b: FloatArray, k: Float) = a[0] + (b[0] - a[0]) * k
@@ -1489,7 +1509,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         const val TITLE_SHIFT_X = 1.45f
         const val LOW_MIX = 0.35f
         const val LOW_GAIN = 1.4f
-        const val LOW_HATCH_K = 1.6f
+        /** The trunks' hatch when the ribs are open: the loudest thing on him that is not a tell. */
+        const val LOW_OPEN_K = 2.2f
         const val HATCH_SKIN = 0.20f
         const val HATCH_BLOCK = 0.30f
         /** DETAIL parts' LOD hysteresis (§12.7): off beyond 3.4 m, on inside 3.0 m. */

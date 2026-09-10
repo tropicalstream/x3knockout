@@ -70,6 +70,14 @@ def slide(dev, dx=1200, steps=8, step_ms=25):
         delay(step_ms); report(dev, True, x0 + dx * i // steps, 2048)
     delay(step_ms); up(dev, x0 + dx, 2048)
 
+def vslide(dev, dy=1200, steps=8, step_ms=25):
+    """A VERTICAL drag: the gesture the start screen's menu reads (Swipe.UP / Swipe.DOWN)."""
+    y0 = 1400
+    down(dev, 2048, y0)
+    for i in range(1, steps + 1):
+        delay(step_ms); report(dev, True, 2048, y0 + dy * i // steps)
+    delay(step_ms); up(dev, 2048, y0 + dy)
+
 def main():
     what = sys.argv[1] if len(sys.argv) > 1 else "fight"
     register(L); register(R)
@@ -112,6 +120,12 @@ def main():
         for i in range(200):
             tap(L if i % 2 == 0 else R); delay(450)
         delay(500)
+    elif what == "startmenu":
+        # The start screen: swipe the RIGHT pad down twice, then tap. Should land on CREDITS.
+        delay(2500)
+        vslide(R); delay(1200)
+        vslide(R); delay(1200)
+        tap(R); delay(2500)
     elif what == "title":
         delay(2500)
         tap(L); delay(1500)

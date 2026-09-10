@@ -294,6 +294,10 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         /** `tip_step` after this many body steps rejected during pad blanks. */
         const val STEP_REJECT_TIP_N = 3
         /** The crowd chants after you have been hit this many times without answering. */
+        /** How long a cheer takes to die down, real seconds. */
+        const val CROWD_SURGE_T = 1.6f
+        /** Yours, landed and unanswered, before the room starts chanting your name. */
+        const val CHANT_YOU_AFTER = 3
         const val CHANT_AFTER_HITS = 2
         /** The stagger's warble is retriggered at this period while he wobbles: the bank has no looping id for it. */
         const val WARBLE_PERIOD = 0.5f
@@ -559,6 +563,16 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     private var chantT = 0f
     /** The crowd bed's lagged level (real), the meter's `put_him_away` latch, the KO's real time. */
     private var crowdLevel = 0f
+    /**
+     * THE ROOM COMING UP (VOICE.md §6.4.1). 0..1, raised by anything worth cheering and decaying
+     * on REAL time — the crowd is outside the fight, the way the referee is. The renderer reads
+     * it into the wave's amplitude, the crowd's brightness and the front row's bounce, so a cheer
+     * is something the player SEES as well as hears; on a stroke renderer with no faces, a crowd
+     * that only ever changes volume is a crowd nobody notices.
+     */
+    var crowdSurge = 0f; private set
+    /** Yours, landed, unanswered — the mirror of [hitsUnanswered], and what the room chants on. */
+    private var landedUnanswered = 0
     private var putHimAwaySaid = false
     /** The trainer's round-1 stall line, once a round: the boo repeats, the sentence does not. */
     private var stickSaid = false
@@ -1019,6 +1033,15 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         val counter = p.counter || o.result == PunchResult.COUNTER
         if (landed) {
             p.landed = true; hits++; hitsUnanswered = 0
+            // THE ROOM (VOICE.md §6.4.1). A counter, a special or a stagger is worth a shout; a
+            // third unanswered punch is worth your name. Both go through `cheerUp`, which is the
+            // one place the crowd is raised, so no call site can cheer without the picture
+            // following — a crowd that changes volume and nothing else is a crowd nobody notices.
+            landedUnanswered++
+            if (counter || p.special || o.staggered) cheerUp(0.85f, Lines.CHEER)
+            else if (!drillOn && landedUnanswered >= CHANT_YOU_AFTER && landedUnanswered % CHANT_YOU_AFTER == 0) {
+                cheerUp(0.7f, Lines.CHANT_YOU, 2000L); chant = YOU_NAME.removePrefix("KID ").trim(); chantT = 2f
+            } else cheerUp(0.30f, null)
             // THE METER (§4.5): the first hit of a sequence, every hit after, a counter
             val add = when { counter -> METER_COUNTER; chain == 0 -> METER_FIRST; else -> METER_CHAIN }
             chain++
@@ -1702,7 +1725,9 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         if (meterLit && !putHimAwaySaid) {
             putHimAwaySaid = true
             host.sfx(Sfx.KO_LIT, 1f, 0.8f)
-            if (state == State.FIGHT) host.say(Lines.PUT_HIM_AWAY, false, 2000L)
+            // The room gets to the meter before the trainer does: it is a chant, not applause —
+            // this fires the moment BEFORE something happens, and a crowd in that state stamps.
+            if (state == State.FIGHT) { cheerUp(0.6f, Lines.CLAP, 1500L); host.say(Lines.PUT_HIM_AWAY, false, 2000L) }
             Log.i(TAG, "METER lit meter=$meter")
         } else if (!meterLit) putHimAwaySaid = false
         // the bell's strokes
@@ -1733,7 +1758,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             State.GAME_OVER -> 0.15f
             State.TITLE -> 0f
         }
-        host.crowd(level, 0.7f + 0.5f * crowdLevel)
+        if (crowdSurge > 0f) crowdSurge = max(0f, crowdSurge - dt / CROWD_SURGE_T)
+        host.crowd(level * (1f + 0.45f * crowdSurge), 0.7f + 0.5f * crowdLevel)
     }
 
     // ------------------------------------------------------------------ the body (REAL time)
@@ -1920,6 +1946,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         // The referee sends you to a neutral corner on every knockdown but the last, and on a TKO
         // he is the man who says it is over — the announcer's `winner_ko` is the wrong sentence
         // for a stoppage, and `winner_tko` has been sitting rendered and unreferenced.
+        cheerUp(1f, Lines.ROAR, 1200L)
         if (tko && !ko) host.say(Lines.REF_STOP, urgent = true)
         else if (!final) host.say(Lines.REF_NEUTRAL, patienceMs = 2200L)
         beginCount(Who.HIM, if (final) 0 else riseAtN)
@@ -1947,6 +1974,19 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         score = (score + p).coerceAtLeast(0)
         Log.i(TAG, "SCORE ${if (p >= 0) "+" else ""}$p reason=$reason${if (mult && multiplier > 1 && points > 0) " x$multiplier" else ""}")
     }
+
+    /**
+     * THE ONE PLACE THE CROWD IS RAISED. A level 0..1 into [crowdSurge] (taking the louder of the
+     * two, never stacking) and, optionally, the thing they shout. Voice lines are `patienceMs`-
+     * gated rather than urgent: a cheer that arrives four seconds late is a cheer for the wrong
+     * punch, and the bus is allowed to drop it.
+     */
+    private fun cheerUp(level: Float, id: String?, patience: Long = 900L) {
+        crowdSurge = max(crowdSurge, level.coerceIn(0f, 1f))
+        if (id != null && !drillOn) host.say(id, patienceMs = patience)
+    }
+
+    private val drillOn: Boolean get() = boxer.drill != Boxer.Drill.OFF
 
     /** The one feedback word at (320, 300), one at a time, never a stack. */
     private fun say(word: String) { feedback = word; feedbackT = FEEDBACK_T }
@@ -2037,7 +2077,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
                 if (result == StrikeResult.CRUSH) { guardCrushedT = GUARD_CRUSH_T; guardUp = false; word = "CRUSHED"; host.sfx(Sfx.GUARD_THUD, 0.7f, 0.9f) }
                 host.sfx(when { glance -> Sfx.GLANCE; attack == Boxer.Attack.WING_L -> Sfx.HIT_BODY; else -> Sfx.HIT_HEAD }, 0.85f, if (glance) 0.6f else 0.9f)
                 if (glance) word = "GLANCE"
-                if (!drill && hitsUnanswered >= CHANT_AFTER_HITS && hitsUnanswered % CHANT_AFTER_HITS == 0) {
+                landedUnanswered = 0
+        if (!drill && hitsUnanswered >= CHANT_AFTER_HITS && hitsUnanswered % CHANT_AFTER_HITS == 0) {
                     // The crowd chants the man in the ring, not the Rooster forever. `chant_<id>`
                     // is rendered for all five and reached through the host's per-fighter resolve.
                     host.say(Lines.CHANT, false, 1500L); chant = fighter.name.removePrefix("THE "); chantT = 2f

@@ -235,43 +235,36 @@ class Boxer {
         /** A body blow opens the guard for this long (world), by round; a second body blow inside it → STAGGER. */
         val GUARD_OPEN_BODY = floatArrayOf(0.6f, 0.5f, 0.4f)
         /**
-         * THE LOW GUARD — the elbows, and the missing half of DESIGN.md §4.3.
+         * THE LOW GUARD — his elbows, and the second pass at it (2026-09-10).
          *
-         * He has ONE PAIR OF ARMS and two things to cover with them: the gloves are up at his jaw
-         * and the elbows are down at his ribs, and what drives one into place takes the other out
-         * of it. The engine modelled only half of that. `punch()` tested `level == Level.HEAD &&
-         * !open` and there was no `Level.BODY` branch anywhere in the guard logic, so the torso
-         * was a hole that was open in every state in the game: nine right hands to the ribs TKO'd
-         * the Rooster from the opening bell without once reading a tell, and the man whose entire
-         * lesson is DO NOT THROW could be cheesed by throwing.
+         * THE FIRST PASS WAS NOT ENOUGH, and the owner said so: *"the torso defense from opposing
+         * boxers still needs to improve."* He was right and the hole was one clause. The ribs were
+         * OPEN BY DEFAULT — `IDLE -> tuckLeft <= 0f` — so the elbows only ever came in AFTER a body
+         * blow had already landed. A cold neutral gave the first shot away free, and since a head
+         * punch brought the elbows back out again, BODY–HEAD–BODY–HEAD ran forever at one free
+         * body blow every second punch, for no read and no risk. The elbows were a cooldown, not
+         * a guard.
          *
-         * This is the other half, and it is deliberately the SAME ARRAY as [GUARD_OPEN_BODY] —
-         * a test asserts they stay equal. That equality IS the invariant: **his elbows are in for
-         * exactly as long as his gloves are out**, both timers written by the same blow on the
-         * same frame, so a second body blow can never arrive inside the window the first one
-         * opened. The two-punch body stagger becomes the three-punch BODY–HEAD–BODY, which is a
-         * combination rather than a mash, and every number in the stagger rule is untouched.
+         * THE RIBS ARE SHUT NOW, exactly as the chin is, and they have to be EARNED. Two levers,
+         * and the player picks:
+         *
+         *  - **PUNCH HIGH.** [Fighter.lowBlows] head punches that reach his gloves — landed or
+         *    blocked, it is the same motion — make him cover up, and his elbows leave his ribs.
+         *    This is the oldest combination in boxing and it is now the fast route: it costs
+         *    hearts, but a head punch is going to happen anyway.
+         *  - **DIG.** [Fighter.digs] body punches into closed elbows force them apart. Slower and
+         *    it costs the same hearts, but it needs no opening at all — it is the answer for the
+         *    man whose chin you cannot reach.
+         *
+         * Either one opens the ribs for [BODY_OPEN] world seconds. A body blow that then lands
+         * does what it always did — full damage, and it opens the HEAD guard, which is the key
+         * DESIGN.md §4.2 is built on — and SHUTS THE RIBS BEHIND IT. So two body blows in a row
+         * are still impossible, the stagger is still BODY–HEAD–BODY, and every number in the
+         * stagger rule is still untouched. What changed is that the first one is no longer a gift.
          */
-        val TUCK_BODY = floatArrayOf(0.6f, 0.5f, 0.4f)
-        /**
-         * A rail, not a knob: no man's elbows may come in for less than the fastest possible
-         * follow-up punch, or some future fighter row with a small `lowMul` lets a back-to-back
-         * body double through the invariant above.
-         */
-        const val TUCK_MIN = 0.20f
-        /**
-         * THE HOLD. A body punch REFUSED by the elbows refreshes them to at least this fraction of
-         * a full tuck: he saw that, and he is staying there. A correct read never triggers it; a
-         * player probing for the last frames of the window finds the door has moved. A fraction
-         * rather than an absolute, so probing cannot LENGTHEN the Sardine's short tuck.
-         */
-        const val TUCK_HOLD_FRAC = 0.50f
-        /**
-         * THE SET: the picture leads the rule by this much world time, so the forearms go dark
-         * before the ribs are actually available and the cue means THROW NOW rather than THROW A
-         * MOMENT AGO. It must stay under `Fight.JAB_LAND_T` (0.15) or the cue would be a lie.
-         */
-        const val TUCK_SET_T = 0.10f
+        val BODY_OPEN = floatArrayOf(0.6f, 0.5f, 0.4f)
+        /** No man's ribs may open for less than a follow-up punch, whatever his multipliers say. */
+        const val BODY_OPEN_MIN = 0.20f
         /**
          * A stagger earned by BODY WORK is half a stagger earned by a READ, in length and in cap
          * alike (R1: 0.45 s / 0.80 s against the read's 0.90 / 1.60). The perfect dodge, the
@@ -502,7 +495,9 @@ class Boxer {
         var ko = false
         /** The punch interrupted his tell (any early hit does; only the stun case also stuns). */
         var interrupted = false
-        fun clear() { result = PunchResult.GUARD; dmg = 0; opened = false; staggered = false; stunned = false; knockdown = false; ko = false; interrupted = false }
+        /** A body punch refused by his elbows and BANKED toward forcing them apart (see [dig]). */
+        var dug = false
+        fun clear() { result = PunchResult.GUARD; dmg = 0; opened = false; staggered = false; stunned = false; knockdown = false; ko = false; interrupted = false; dug = false }
     }
 
     /**
@@ -525,7 +520,7 @@ class Boxer {
         fun onRecover(attack: Attack)
         fun onGuard(open: Boolean, by: String)
         /**
-         * His ELBOWS moved (see [TUCK_BODY]). Defaulted empty on purpose: this interface has no
+         * His ELBOWS moved (see [BODY_OPEN]). Defaulted empty on purpose: this interface has no
          * other defaults and both implementers write all of it, so a bare declaration would break
          * the test build for a line nothing is obliged to act on.
          */
@@ -617,19 +612,21 @@ class Boxer {
     var guardOpenBy = ""; private set
     /** A body blow inside the open window: the second one is a STAGGER. */
     var bodyBlowsInWindow = 0; private set
-    // ---- the low guard (see [TUCK_BODY]): the exact mirror of the three fields above it
-    /** World seconds his elbows are in. A body punch inside this is refused the way a head punch is. */
-    var tuckLeft = 0f; private set
-    /** What put them there, for the `low=` token and the picture. */
-    var tuckBy = ""; private set
-    /** Head punches still needed to bring his elbows back out. [Fighter.lowBlows] sets it; a SPECIAL clears it. */
-    var lowBlowsLeft = 0; private set
-    /**
-     * What the RENDERER draws, which leads the rule by [TUCK_SET_T] — a deliberate, bounded lie in
-     * the player's favour, because a cue that arrives on the same frame as the opening is a cue
-     * nobody can act on.
-     */
-    var lowOpen = true; private set
+    // ---- the low guard (see [BODY_OPEN]): the exact mirror of the three fields above it
+    /** World seconds his ribs are available. ZERO IS THE RESTING STATE: his elbows are down. */
+    var bodyOpenLeft = 0f; private set
+    /** What opened them, for the `low=` token and the picture. */
+    var bodyOpenBy = ""; private set
+    /** Head punches banked toward making him cover high ([Fighter.lowBlows] opens the ribs). */
+    var coverHigh = 0; private set
+    /** Body punches banked into closed elbows ([Fighter.digs] forces them apart). */
+    var digsDone = 0; private set
+    /** 0..1, how close the player is to opening the ribs by either lever — the forearms' heat. */
+    val bodyWork: Float get() = if (bodyOpenLeft > 0f) 0f else max(
+        coverHigh.toFloat() / fighter.lowBlows.coerceAtLeast(1),
+        digsDone.toFloat() / fighter.digs.coerceAtLeast(1)).coerceIn(0f, 1f)
+    /** What the RENDERER draws: his ribs are available right now. */
+    var lowOpen = false; private set
     /** This stagger's own cap: a work-stagger must not inflate back to a read-stagger's ceiling. */
     var staggerCapNow = 0f; private set
 
@@ -836,7 +833,7 @@ class Boxer {
         for (slot in rotation) if (slot < pool.size) order.add(pool[slot])
         for (name in pool) if (name !in order) order.add(name)
         guardOpenLeft = 0f; guardOpenBy = ""; bodyBlowsInWindow = 0
-        tuckLeft = 0f; tuckBy = ""; lowBlowsLeft = 0; lowOpen = true; staggerCapNow = 0f
+        bodyOpenLeft = 0f; bodyOpenBy = ""; coverHigh = 0; digsDone = 0; lowOpen = false; staggerCapNow = 0f
         lat = 0f; range = REST_RANGE; gaitT = 0f; restRange = REST_RANGE; creep = 0f
         mirror = 0f; plantLeft = 0f; riseLeft = 0f; downX = 0f; downZ = -REST_RANGE; yaw = 0f
         staggerLeft = 0f; staggerTotal = 0f; shaking = false; stunLeft = 0f; stunT = 0f; openStep = false
@@ -943,7 +940,7 @@ class Boxer {
 
         // world time: everything that can hurt
         if (guardOpenLeft > 0f) { guardOpenLeft = dec(guardOpenLeft, w); if (guardOpenLeft <= 0f) bodyBlowsInWindow = 0 }
-        if (tuckLeft > 0f) { tuckLeft = dec(tuckLeft, w); if (tuckLeft <= 0f) { tuckBy = ""; lowBlowsLeft = 0 } }
+        if (bodyOpenLeft > 0f) { bodyOpenLeft = dec(bodyOpenLeft, w); if (bodyOpenLeft <= 0f) bodyOpenBy = "" }
         if (pecksOnlyLeft > 0f) pecksOnlyLeft = dec(pecksOnlyLeft, w)
         lastBody.headX = body.headX; lastBody.headY = body.headY; lastBody.headZ = body.headZ
         feet(w, r, body)
@@ -1639,7 +1636,7 @@ class Boxer {
         phrase = null; phraseName = ""; program.clear(); stepIndex = 0; waitLeft = 0f
         attack = null; feint = null; aimSet = false; tracking = false; stallFeint = false; openStep = false
         guardOpenLeft = 0f; bodyBlowsInWindow = 0; stunLeft = 0f
-        tuckLeft = 0f; tuckBy = ""; lowBlowsLeft = 0
+        bodyOpenLeft = 0f; bodyOpenBy = ""; coverHigh = 0; digsDone = 0
         // A STAGGER EARNED BY WORK IS HALF A STAGGER EARNED BY A READ ([BODY_STAGGER_FRAC]), and
         // the CAP has to be halved with it: `extendStagger` used to read STAGGER_CAP directly, so
         // a 0.45 s work-stagger inflated straight back to the 1.60 s read ceiling on the first
@@ -1743,7 +1740,7 @@ class Boxer {
         outcome.knockdown = true; outcome.ko = isKo; outcome.result = PunchResult.KNOCKDOWN
         abandon()
         guardOpenLeft = 0f; bodyBlowsInWindow = 0; stunLeft = 0f; staggerLeft = 0f; shaking = false; hitLeft = 0f
-        tuckLeft = 0f; tuckBy = ""; lowBlowsLeft = 0
+        bodyOpenLeft = 0f; bodyOpenBy = ""; coverHigh = 0; digsDone = 0
         downX = footX; downZ = footZ                  // he falls where he stood, and stays there
         downT = 0f
         enter(Phase.KNOCKDOWN)
@@ -1777,36 +1774,47 @@ class Boxer {
         Phase.STAGGER -> !shaking
         Phase.STUN, Phase.RECOVER -> true
         Phase.TELL, Phase.STRIKE, Phase.FEINT -> true
-        Phase.IDLE -> if (level == Level.HEAD) guardOpenLeft > 0f else tuckLeft <= 0f
+        Phase.IDLE -> if (level == Level.HEAD) guardOpenLeft > 0f else bodyOpenLeft > 0f
         else -> false
     }
 
     /**
-     * THE ELBOWS COME IN. The one place the low guard is written, exactly as [openGuard] is the
-     * one place the high one is — so [Fighter.lowMul] is the whole of "his elbows are better" and
-     * no call site can forget to apply it, and neither can `openMul`.
+     * HIS RIBS COME AVAILABLE. The one place the low guard is written, exactly as [openGuard] is
+     * the one place the high one is — so [Fighter.lowMul] is the whole of "his elbows are better"
+     * and no call site can forget it, and neither can `openMul`.
      */
-    private fun tuck(by: String) {
-        val full = (TUCK_BODY[round - 1] * fighter.openMul * fighter.lowMul).coerceAtLeast(TUCK_MIN)
-        if (full > tuckLeft) { tuckLeft = full; tuckBy = by }
-        lowBlowsLeft = fighter.lowBlows
+    private fun openBody(by: String) {
+        val full = (BODY_OPEN[round - 1] * fighter.openMul * fighter.lowMul).coerceAtLeast(BODY_OPEN_MIN)
+        if (full > bodyOpenLeft) { bodyOpenLeft = full; bodyOpenBy = by }
+        coverHigh = 0; digsDone = 0
+        listener?.onLowGuard(true, by)
+    }
+
+    /** …and shut again the moment somebody hits them. Two body blows in a row stay impossible. */
+    private fun closeBody() { bodyOpenLeft = 0f; bodyOpenBy = ""; coverHigh = 0; digsDone = 0 }
+
+    /**
+     * PUNCH HIGH AND HE COVERS HIGH — the fast lever, and the oldest combination in boxing. Any
+     * head punch that reaches his gloves counts, landed or blocked, because it is the same motion
+     * either way; a SPECIAL does it outright. The Anvil wants two, and that is his wall.
+     */
+    private fun coverUp(clearAll: Boolean = false) {
+        if (bodyOpenLeft > 0f) return
+        coverHigh++
+        if (clearAll || coverHigh >= fighter.lowBlows) openBody("HIGH")
     }
 
     /**
-     * THE ELBOWS COME OUT. [Fighter.lowBlows] head punches do it (the Anvil wants two), a special
-     * does it outright — and it is a CLEAR, not a decrement of the timer, because a long tuck must
-     * be defeated by the right ACTION and not merely outwaited.
+     * DIG AND THEY COME APART — the slow lever, and the one that needs no opening at all. A body
+     * punch into closed elbows is refused and costs a heart like any other, but it is not wasted:
+     * it is the answer for the man whose chin the player cannot reach.
      */
-    private fun untuck(clearAll: Boolean = false) {
-        if (tuckLeft <= 0f) return
-        if (clearAll || --lowBlowsLeft <= 0) { tuckLeft = 0f; lowBlowsLeft = 0; tuckBy = "" }
+    private fun dig() {
+        digsDone++
+        if (digsDone >= fighter.digs) openBody("DIG")
     }
 
-    /** The full tuck this man would get this round — the basis for [TUCK_HOLD_FRAC]'s refresh. */
-    private fun fullTuck(): Float =
-        (TUCK_BODY[round - 1] * fighter.openMul * fighter.lowMul).coerceAtLeast(TUCK_MIN)
-
-    /** A window opens (or a longer one replaces a shorter): what opened it names the `GUARD open= by=` line. */
+    /** A window opens (or a longer one replaces a shorter): what opened it names the `GUARD open= by=` line. */    /** A window opens (or a longer one replaces a shorter): what opened it names the `GUARD open= by=` line. */
     private fun openGuard(seconds0: Float, by: String, blows: Int) {
         // ONE PLACE. Every route into an opening — a body blow, a guard-counter, the end of a
         // recover, a special — comes through here, so [Fighter.openMul] is the whole of "his
@@ -1823,17 +1831,13 @@ class Boxer {
      * tail left running. Closed — gloves up — while he winds up, strikes, feints, taunts, or lies
      * on the canvas. The transitions are what the fight logs.
      */
-    /**
-     * WHAT THE PICTURE SAYS ABOUT HIS RIBS, which is not quite what the rule says: [lowOpen] goes
-     * true [TUCK_SET_T] world seconds before a body punch would actually land. Called on the line
-     * after [syncGuard] so the two can never drift by a frame.
-     */
+    /** What the picture says about his ribs, straight off the rule — there is nothing to lead now. */
     private fun syncLowGuard() {
         val u = if (phase == Phase.HIT) under else phase
-        val open = openAt(Level.BODY, u) || tuckLeft <= TUCK_SET_T
+        val open = openAt(Level.BODY, u)
         if (open == lowOpen) return
         lowOpen = open
-        listener?.onLowGuard(open, if (open) "OUT" else tuckBy.ifEmpty { "IN" })
+        if (!open) listener?.onLowGuard(false, "COVER")
     }
 
     private fun syncGuard() {
@@ -1895,11 +1899,11 @@ class Boxer {
         val midAction = u == Phase.TELL || u == Phase.STRIKE || u == Phase.RECOVER || u == Phase.FEINT
         // HIS HANDS ARE BUSY, BUT HIS GUARD IS NOT DOWN. A body blow during a tell, a strike or a
         // feint lands full and interrupts as it always did — but below, it banks NOTHING: no
-        // window, no blow count, no tuck. Without that, the free hit a tell already gives you
+        // window and no blow count. Without that, the free hit a tell already gives you
         // also handed you the first half of a stagger for nothing.
         val busy = u == Phase.TELL || u == Phase.STRIKE || u == Phase.FEINT
 
-        // THE GATE IS TWO GATES NOW (DESIGN.md §4.3, and the whole of [TUCK_BODY]'s note). It used
+        // THE GATE IS TWO GATES NOW (DESIGN.md §4.3, and the whole of [BODY_OPEN]'s note). It used
         // to read `level == Level.HEAD && !open`, so a body punch was never once tested against a
         // guard in the history of this game.
         if (!openAt(level, u)) {
@@ -1909,10 +1913,11 @@ class Boxer {
             // entirely and stagger him from a cold stance for 35.
             if (special) {
                 openGuard(GUARD_OPEN_SPECIAL, "SPECIAL", blows = 0); outcome.opened = true
-                tuckLeft = 0f; lowBlowsLeft = 0
+                openBody("SPECIAL")
             } else if (level == Level.BODY) {
-                // THE HOLD: he saw that, and he is staying there. A correct read never trips it.
-                tuckLeft = max(tuckLeft, TUCK_HOLD_FRAC * fullTuck())
+                // A DIG. Refused, and it costs a heart like any refused punch — but it is banked,
+                // and enough of them force his elbows apart. See [dig].
+                dig(); outcome.dug = true
             } else if (thatAllAgo >= THAT_ALL_COOLDOWN) {
                 thatAllAgo = 0f; listener?.onSay(Lines.THAT_ALL, false)
             }
@@ -1925,15 +1930,14 @@ class Boxer {
             // It is the one thing on the card that punishes the verb the player most wants to use,
             // and it is why he is the third fight and not the first.
             if (fighter.gimmick == Fighter.Gimmick.COUNTER && !inDrill) counterArmed = true
-            if (level == Level.HEAD) untuck()
+            if (level == Level.HEAD && !special) coverUp()
             return outcome
         }
 
-        // A HEAD PUNCH THAT REACHES HIS GLOVES BRINGS THE ELBOWS OUT, landed or blocked, because
-        // it is the same motion either way. This is what makes a punch into the closed high guard
-        // something other than a pure tax: it costs a heart and half a world second, and it buys
-        // you the ribs.
-        if (level == Level.HEAD) untuck(clearAll = special)
+        // A HEAD PUNCH THAT REACHES HIS GLOVES MAKES HIM COVER HIGH, landed or blocked, because
+        // it is the same motion either way — and covering high is what takes his elbows off his
+        // ribs. This is what makes a punch upstairs worth throwing even into a closed guard.
+        if (level == Level.HEAD) coverUp(clearAll = special)
 
         // it lands
         var d = dmg
@@ -1961,7 +1965,7 @@ class Boxer {
         when {
             staggered -> extendStagger()
             stuns -> { beginStun(); outcome.stunned = true }
-            stunned -> if (level == Level.BODY) { tuck("WAKE"); wake() } else restun()
+            stunned -> if (level == Level.BODY) { closeBody(); wake() } else restun()
             special -> { beginStagger("SPECIAL"); outcome.staggered = true }
             level == Level.BODY -> {
                 if (busy) hitOverlay(level, interrupts)          // banks nothing: see `busy` above
@@ -1970,7 +1974,7 @@ class Boxer {
                 } else {
                     val opened = !guardOpen
                     openGuard(GUARD_OPEN_BODY[round - 1], "BODY", blows = bodyBlowsInWindow + 1)
-                    tuck("BODY")                                  // the same blow writes both timers
+                    closeBody()                                   // and his elbows come straight back down
                     ratchetBack()                                 // and buys back the ring he cut
                     outcome.opened = opened
                     hitOverlay(level, interrupts)

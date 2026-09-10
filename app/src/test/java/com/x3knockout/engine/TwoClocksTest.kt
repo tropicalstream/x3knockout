@@ -114,15 +114,21 @@ class TwoClocksTest {
     fun aLandedPunchIsCutAndStopsBothClocks() {
         val r = Rig(); r.toFight()
         val f = r.fight
-        r.pitchG = -0.5f   // a full nod below the rest pitch taken at the bell: AIM LOW, a body blow
+        // ONE UPSTAIRS FIRST. His ribs are covered in a cold neutral now (Boxer.BODY_OPEN), so a
+        // body blow that lands has to be earned — which is the whole of the second torso pass.
         r.run(0.2f)
+        f.punch(Hand.LEFT)                       // upstairs, standing tall: it makes him cover
+        r.run(Clock.PUNCH_JAB_T + DT)
+        val hits0 = f.hits
+        r.pitchG = -0.5f   // a full nod below the rest pitch taken at the bell: AIM LOW, a body blow
+        r.run(2 * DT)
         assertTrue("the duck arms the body blow", f.body.aimLow)
+        assertTrue("...and his ribs are there, briefly", r.fight.boxer.lowOpen)
         f.punch(Hand.LEFT)
         r.run(Fight.JAB_LAND_T + DT)
-        assertEquals("a body blow lands through the closed guard", 1, f.hits)
-        assertEquals("landing costs no heart", Fight.HEARTS, f.hearts)
+        assertEquals("the earned body blow lands", hits0 + 1, f.hits)
         assertEquals("the impact frame: both clocks stop", Clock.Forced.HITSTOP, f.clock.forced)
-        assertEquals("the first hit of a sequence: +2", Fight.METER_FIRST, f.meter)
+
         r.run(Clock.HITSTOP_JAB_MS / 1000f + 2 * DT)
         assertTrue("landing is cheaper than missing: the window was cut, not extended", f.clock.timedState != Clock.Forced.PUNCH)
     }

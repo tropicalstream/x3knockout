@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * THE LOW GUARD — the missing half of the guard (`Boxer.TUCK_BODY`, DESIGN.md §4.3).
+ * THE LOW GUARD — his ribs, and how they are earned (`Boxer.BODY_OPEN`, DESIGN.md §4.3.2).
  *
  * The defect these tests exist to keep out: `punch()` tested `level == Level.HEAD && !open` and
  * there was no `Level.BODY` branch anywhere in the guard logic, so the torso was open in every
@@ -14,9 +14,9 @@ import org.junit.Test
  * once reading a tell, and a BODY-level special staggered him from a cold stance for full damage
  * in flat contradiction of DESIGN.md §4.5.
  *
- * The invariant the whole design rests on is one line — **his elbows are in for exactly as long
- * as his gloves are out** — and [theElbowsAreInForAsLongAsTheGlovesAreOut] is that sentence as an
- * assertion rather than a comment.
+ * The invariant the whole design rests on is one sentence — **a cold neutral offers the ribs
+ * nothing** — and [aColdNeutralOffersTheRibsNothing] is that sentence as an assertion rather than
+ * a comment, for every man on the card.
  */
 class LowGuardTest {
 
@@ -63,52 +63,89 @@ class LowGuardTest {
     private fun jab(b: Boxer, level: Level) = b.punch(Hand.LEFT, level, 8, counter = false, special = false)
 
     @Test
-    fun theElbowsAreInForAsLongAsTheGlovesAreOut() {
-        assertArrayEquals("THE invariant, and it is a test and not a comment",
-            Boxer.GUARD_OPEN_BODY, Boxer.TUCK_BODY, 0f)
-    }
-
-    @Test
-    fun noManOnTheCardCanBeBodiedTwiceInOneWindow() {
-        // For every fighter and every round: the tuck the same blow writes is never shorter than
-        // the window it opens, so a second body blow can never arrive inside the first one's gift.
+    fun aColdNeutralOffersTheRibsNothing() {
+        // THE DEFECT THIS SUITE EXISTS FOR, second pass. The first fix left `IDLE -> tuckLeft
+        // <= 0f`, so the ribs were open by DEFAULT: the first body blow of every exchange landed
+        // free, and since a head punch reopened them, BODY-HEAD-BODY-HEAD ran forever at one
+        // free body blow every second punch. The owner: "the torso defense still needs to
+        // improve." They are shut now, exactly as his chin is.
         for (f in Fighter.CARD) {
-            for (r in 0 until 3) {
-                val tuck = (Boxer.TUCK_BODY[r] * f.openMul * f.lowMul).coerceAtLeast(Boxer.TUCK_MIN)
-                val window = Boxer.GUARD_OPEN_BODY[r] * f.openMul
-                assertTrue("${f.id} R${r + 1}: tuck $tuck must reach TUCK_MIN", tuck >= Boxer.TUCK_MIN)
-                if (f.lowMul >= 1f) {
-                    assertTrue("${f.id} R${r + 1}: tuck $tuck must cover the window $window", tuck >= window - 1e-6f)
-                }
-            }
+            val b = boxer(who = f)
+            run(b, 0.2f)
+            assertEquals("${f.id}: his ribs are covered in a cold neutral",
+                PunchResult.GUARD, jab(b, Level.BODY).result)
+            assertTrue("${f.id}: and the picture agrees", !b.lowOpen)
         }
     }
 
     @Test
-    fun theSecondBodyBlowInAnIdleIsRefusedByTheElbows() {
+    fun punchHighAndHeCoversHigh() {
+        // The fast lever, and the oldest combination in boxing.
         val rec = Rec(); val b = boxer(rec)
         run(b, 0.2f)
-        assertEquals("the ribs are open on a cold stance", PunchResult.LAND, jab(b, Level.BODY).result)
-        assertTrue("...and the elbows come in", b.tuckLeft > 0f)
-        run(b, 0.1f)
-        assertTrue("...which the picture shows a frame later", !b.lowOpen)
-        assertEquals("the second one is refused", PunchResult.GUARD, jab(b, Level.BODY).result)
-        assertTrue("the refusal is a hold, not a hole", b.tuckLeft > 0f)
-        assertTrue("the picture said so", rec.lows.any { it.startsWith("in:") })
+        assertEquals("the Rooster wants one", 1, b.fighter.lowBlows)
+        assertEquals("upstairs is refused too, in a cold neutral", PunchResult.GUARD, jab(b, Level.HEAD).result)
+        run(b, 0.05f)
+        assertTrue("...but it took his elbows off his ribs", b.lowOpen)
+        assertEquals("and now downstairs lands", PunchResult.LAND, jab(b, Level.BODY).result)
+        assertTrue("...which shuts them behind it", b.bodyOpenLeft <= 0f)
+        assertTrue("...and opens his chin, which is what a body blow is for", b.guardOpenLeft > 0f)
     }
 
     @Test
-    fun bodyHeadBodyIsTheStaggerAndItIsHalfARead() {
+    fun theAnvilWantsTwoUpstairsBeforeHisRibsAreThere() {
+        val b = boxer(who = Fighter.at(2))
+        assertEquals("anvil", b.fighter.id)
+        assertEquals(2, b.fighter.lowBlows)
+        run(b, 0.2f); jab(b, Level.HEAD); run(b, 0.05f)
+        assertTrue("one is not enough on him", !b.lowOpen)
+        jab(b, Level.HEAD); run(b, 0.05f)
+        assertTrue("two is", b.lowOpen)
+    }
+
+    @Test
+    fun diggingForcesThemApartWithNoOpeningAtAll() {
+        // The slow lever: the answer for the man whose chin the player cannot reach.
+        val rec = Rec(); val b = boxer(rec)
+        run(b, 0.2f)
+        val n = b.fighter.digs
+        assertTrue("the Rooster's ribs cost three", n == 3)
+        for (i in 1 until n) {
+            val o = jab(b, Level.BODY)
+            assertEquals("dig $i is refused", PunchResult.GUARD, o.result)
+            assertTrue("...and banked", o.dug)
+            assertTrue("...and the player can see it landing", b.bodyWork > 0f)
+            run(b, 0.05f)
+        }
+        assertEquals("the last dig is refused too", PunchResult.GUARD, jab(b, Level.BODY).result)
+        run(b, 0.05f)
+        assertTrue("...but it forced them apart", b.lowOpen)
+        assertEquals("and now the ribs are there", PunchResult.LAND, jab(b, Level.BODY).result)
+    }
+
+    @Test
+    fun noManCanBeBodiedTwiceInARow() {
+        for (f in Fighter.CARD) {
+            val b = boxer(who = f)
+            run(b, 0.2f)
+            repeat(f.lowBlows) { jab(b, Level.HEAD); run(b, 0.05f) }
+            assertEquals("${f.id}: the earned body blow lands", PunchResult.LAND, jab(b, Level.BODY).result)
+            assertTrue("${f.id}: the ribs shut behind it", b.bodyOpenLeft <= 0f)
+            run(b, 0.05f)
+            assertEquals("${f.id}: the second one is not free", PunchResult.GUARD, jab(b, Level.BODY).result)
+        }
+    }
+
+    @Test
+    fun bodyHeadBodyIsStillTheStaggerAndItIsHalfARead() {
         val b = boxer()
         run(b, 0.2f)
+        jab(b, Level.HEAD); run(b, 0.05f)                 // make him cover
         assertEquals(PunchResult.LAND, jab(b, Level.BODY).result)
         run(b, 0.05f)
-        // the head punch is what brings his elbows out — landed or blocked, it is the same motion
-        jab(b, Level.HEAD)
-        assertTrue("his elbows are out again", b.tuckLeft <= 0f)
-        run(b, 0.05f)
+        jab(b, Level.HEAD); run(b, 0.05f)                 // and again
         val o = jab(b, Level.BODY)
-        assertTrue("the third punch of the combination folds him", o.staggered)
+        assertTrue("the combination folds him", o.staggered)
         assertEquals("a stagger earned by work is half a stagger earned by a read",
             Boxer.STAGGER_CAP[0] * Boxer.BODY_STAGGER_FRAC, b.staggerCapNow, 1e-5f)
     }
@@ -117,26 +154,13 @@ class LowGuardTest {
     fun aBodySpecialIntoAClosedGuardOnlyOpensIt() {
         val b = boxer()
         run(b, 0.2f)
-        jab(b, Level.BODY)                    // his elbows come in
-        run(b, 0.05f)
         val hp = b.hp
         val o = b.punch(Hand.RIGHT, Level.BODY, 35, counter = false, special = true)
         assertEquals("DESIGN.md 4.5: into a closed guard it only opens it", PunchResult.GUARD, o.result)
         assertEquals("no damage", hp, b.hp)
         assertTrue("it opened him", o.opened)
-        assertTrue("...and it took his elbows with it", b.tuckLeft <= 0f)
-    }
-
-    @Test
-    fun theAnvilWantsTwoHeadPunchesToOpenHisRibs() {
-        val b = boxer(who = Fighter.at(2))
-        assertEquals("anvil", b.fighter.id)
-        run(b, 0.2f)
-        assertEquals(PunchResult.LAND, jab(b, Level.BODY).result)
-        run(b, 0.05f); jab(b, Level.HEAD)
-        assertTrue("one is not enough on him", b.tuckLeft > 0f)
-        run(b, 0.05f); jab(b, Level.HEAD)
-        assertTrue("two is", b.tuckLeft <= 0f)
+        run(b, 0.05f)
+        assertTrue("...and it took his elbows with it", b.lowOpen)
     }
 
     @Test
@@ -148,6 +172,6 @@ class LowGuardTest {
         val o = jab(b, Level.BODY)
         assertEquals("his hands are busy: it lands", PunchResult.LAND, o.result)
         assertTrue("...but it banks no window", b.guardOpenLeft <= 0f)
-        assertTrue("...and no tuck", b.tuckLeft <= 0f)
+        assertTrue("...and no opening downstairs", b.bodyOpenLeft <= 0f)
     }
 }

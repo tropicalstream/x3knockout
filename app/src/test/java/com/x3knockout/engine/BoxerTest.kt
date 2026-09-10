@@ -243,6 +243,8 @@ class BoxerTest {
         val rec = Rec(); val b = boxer(rec); val body = standing()
         b.idle()                                                        // his guard up, nothing thrown (a drill would take no damage)
         b.update(DT, DT, body)
+        // his ribs have to be earned now (Boxer.BODY_OPEN): one upstairs makes the Rooster cover
+        b.punch(Hand.LEFT, Level.HEAD, 8, false, false); b.update(DT, DT, body)
         b.punch(Hand.LEFT, Level.BODY, 10, false, false); b.update(DT, DT, body)   // 110, the window opens
         var n = 0
         while (rec.knockdown == null && n++ < 10) { b.punch(Hand.RIGHT, Level.HEAD, 8, false, false); b.update(0.001f, DT, body) }
