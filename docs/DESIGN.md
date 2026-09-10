@@ -266,6 +266,40 @@ crowd nobody notices.
 
 ---
 
+## 0.26 THE CORNER — a minute on the stool (the owner, 2026-09-10)
+
+> *"there be a short between match rounds where the players are shown sitting and the coach
+> interacting with them."*
+
+The round-end was a caption over a fight that had simply stopped. It is a **scene** now, and
+almost all of it is staging rather than drawing:
+
+- **You sit down.** `Fight.seatK` eases 0 → 1 on real time and the renderer drops the EYE by
+  `SEAT_DROP` (0.42 m) against it. That one subtraction does most of the work: the ropes go up
+  over your head, the canvas fills the bottom of the glass, and the trainer leaning in is at your
+  eye level rather than looming. **You do not look at a man sitting down — you sit down.**
+- **He walks to his own corner and sits**, eased on the same number, so the two of you leave the
+  middle of the ring together. His hips settle 10 cm and he folds to 0.86 — a seated man's feet
+  stay on the floor, and sinking the whole sprite buried him in the canvas.
+- **His second stoops over him**, and his stool is drawn in his own trunks colour. Two figures in
+  a far corner is what says *sitting* at 4.7 m on a stroke renderer; a pose never could, and one
+  man sitting alone reads as a bug.
+- **Your coach is in your face.** The referee's own 92-stroke figure in ACID GREEN — green
+  because that is the player's colour everywhere else in this game, so he reads as *yours* —
+  crouched to your seated eye level at 1.38 m, which is nearer than anything else the game ever
+  draws. He leans in and back at 0.55 Hz because he is talking, and his right arm swings on
+  `arm_R`, the one part the referee's count already needs a pivot for. No new asset, no new pose
+  strip, no new rig: **the second and third whole human in this game cost one re-skin each.**
+
+The trainer's tip and its caption are unchanged — they simply have a face to come out of now.
+
+**Two things learned twice.** A `StrokeModel` is a flat figure in its own plane and not a
+billboard, so yawing the second toward his own fighter drew a magenta *sliver*; the lean has to
+come from the roll. And the bucket and the player's own stool were cut — both sat about a metre
+below a camera looking straight ahead, and strokes nobody can see are strokes spent on nothing.
+
+---
+
 ## 0.3 HIS FEET — footwork, and out-fighting (the owner, 2026-09-10)
 
 > *"make sure opposing boxers have footwork (or lateral movement), and the tactical style built

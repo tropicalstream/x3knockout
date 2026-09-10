@@ -469,7 +469,11 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
      */
     private fun setupCamera(aspect: Float, dt: Float) {
         val b = fight.body
-        camX = b.headX; camY = b.headY - sinkY; camZ = b.headZ
+        // THE STOOL. `seatK` is 0 standing and 1 sitting, eased on real time by the fight; the
+        // eye simply comes down with it. That one subtraction is most of the corner scene: the
+        // ropes go up over the player's head, the canvas fills the bottom of the glass, and the
+        // trainer leaning in is suddenly at eye level rather than looming.
+        camX = b.headX; camY = b.headY - sinkY - Fight.SEAT_DROP * fight.seatK; camZ = b.headZ
         val shake = fight.damageFlash * Fight.CAM_SHAKE
         val sx = (rnd.nextFloat() - 0.5f) * shake; val sy = (rnd.nextFloat() - 0.5f) * shake
         val yaw = fight.yaw
@@ -603,6 +607,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // "behind" is a brightness and nothing else — there is no depth to hide it with.
         if (fight.state == State.TITLE) { boxerScene(dim = TITLE_DIM); refereeScene(dt); return }
         boxerScene(dim = 1f)
+        cornerScene(dt)
         sampleTrails(fight.clock.wdt)
         telegraphScene()
         trailsScene()
@@ -667,13 +672,19 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         // week, so the attract screen simply uses them: he warms up in the right third of the
         // ring, which is where a fighter waiting to be introduced actually stands.
         val shift = if (fight.state == State.TITLE) TITLE_SHIFT_X else 0f
-        place.x = b.footX + shift; place.z = b.footZ
+        // BETWEEN ROUNDS HE GOES TO HIS OWN CORNER AND SITS DOWN. Eased on the same `seatK` the
+        // camera uses, so the two men leave the middle of the ring together; his stool is a
+        // diagonal away, which is what makes the empty canvas between you read as a ROUND ENDING
+        // rather than as a pause.
+        val k = fight.seatK
+        place.x = b.footX + shift + (Fight.HIS_CORNER_X - b.footX) * k
+        place.z = b.footZ + (Fight.HIS_CORNER_Z - b.footZ) * k
         bxW = place.x; bzW = place.z
         // HOW HE WAITS — the channel that tells the five men apart before either of them moves.
         // The Sardine jitters, the Anvil heaves, Silk shifts his weight and shows nothing, the
         // Metronome ticks. Same 196 frames underneath all of it; four multipliers on top.
         val fr = fight.fighter
-        place.y = 0.03f * fr.bobAmp * sin(wt * 2.1f * fr.bobHz) * bobMul
+        place.y = 0.03f * fr.bobAmp * sin(wt * 2.1f * fr.bobHz) * bobMul - SEAT_SINK * fight.seatK
         // HIS OWN EASED HEADING, not an instantaneous atan2. `Boxer.resquare` has computed this
         // every frame since the first prototype and nothing has ever read it; an atan2 to a man
         // who is himself translating snaps, and the ease is 0.15 s of REAL time so a frozen world
@@ -685,7 +696,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         place.yaw = if (shift != 0f) set.headingTo(place.x, place.z, camX, camZ) else b.yaw
         place.roll = 0.035f * fr.swayAmp * sin(wt * 1.3f * fr.swayHz)
         place.pitch = 0f
-        place.scale = fr.stature
+        place.scale = fr.stature * (1f - (1f - SEAT_SQUASH) * fight.seatK)
         ux = cos(place.yaw); uz = -sin(place.yaw)
         val d = sqrt((place.x - camX) * (place.x - camX) + (place.z - camZ) * (place.z - camZ))
         val hatchK = sqrt(Boxer.REST_RANGE / d.coerceAtLeast(0.3f))
@@ -1174,6 +1185,107 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
      * for exactly this — eased so it swings rather than pops. With no asset a nine-stroke stand-in
      * is drawn from a table; the ring and the count still read.
      */
+    /**
+     * THE CORNER (the owner: *"there be a short between match rounds where the players are shown
+     * sitting and the coach interacting with them"*).
+     *
+     * The round-end used to be a caption over a fight that had simply stopped. It is a SCENE
+     * now, and almost all of it is staging rather than drawing: the eye drops onto a stool
+     * ([Fight.seatK], `setupCamera`), the man in the other corner walks to his own and sits, and
+     * this method adds the three things that turn an empty ring into a corner — the two stools,
+     * a bucket, and **the one person in the building who is on the player's side, close enough
+     * to touch.**
+     *
+     * THE COACH IS THE REFEREE'S FIGURE IN ACID GREEN. He is 92 strokes of a real man — a face,
+     * a shirt, a bow tie, arms with fists — and re-skinning him is what makes a second whole
+     * human affordable on a stroke renderer. Green because that is the PLAYER's colour
+     * everywhere else in the game: the green wireframe gloves at the bottom of the glass are
+     * yours, and so is he. He is drawn at 0.98 m, which is nearer than anything else the game
+     * ever puts on the glass, and the effect of that on a waveguide is exactly the effect it has
+     * in a real corner: he is in your face and there is nowhere else to look.
+     *
+     * HE IS WORKING, and the animation is three numbers: he leans in and back at 0.55 Hz (he is
+     * talking), his right arm swings on `arm_R` — the same one part the referee counts with,
+     * which is why that pivot exists — and his whole figure rocks a couple of degrees against
+     * the lean. No new asset, no new pose strip, no new rig.
+     */
+    private fun cornerScene(dt: Float) {
+        val k = fight.seatK
+        if (k <= 0.02f) return
+        val model = refereeModel
+        val pose = refereePose
+        if (pose == null || model.parts.isEmpty()) return
+        val t = fight.t
+        val a = 0.95f * k * fightDim
+
+        // --- his stool and your bucket. YOURS IS NOT DRAWN: you are sitting on it, it is 80 cm
+        // below a camera looking straight ahead, and a stool you cannot see is strokes spent on
+        // nothing. His is across the ring where it does the work — it is what says CORNER.
+        // HIS STOOL, in HIS OWN COLOUR — it was BLUE, which is the ropes' colour, and it
+        // vanished into them completely. Behind him, so the seat line lands at his hips.
+        val fc = fight.fighter.trunks
+        wcolor(fc, 0.75f * k)
+        stool(Fight.HIS_CORNER_X, Fight.HIS_CORNER_Z + 0.20f)
+
+        // --- the coach, leaning in and talking
+        val lean = sin(t * 2f * PI.toFloat() * 0.55f)
+        refPlace.x = Fight.COACH_X + 0.03f * lean
+        // HE CROUCHES TO YOUR LEVEL, which is what a corner man actually does to a seated
+        // fighter — and it is also what keeps his face on the glass instead of his sternum.
+        refPlace.y = COACH_CROUCH + 0.025f * lean
+        refPlace.z = Fight.COACH_Z + 0.05f * lean
+        refPlace.yaw = atan2(-(camX - refPlace.x), -(camZ - refPlace.z)) + PI.toFloat()
+        refPlace.pitch = 0f
+        refPlace.roll = 0.045f * lean
+        refPlace.scale = COACH_SCALE
+        pose.reset()
+        if (refereeArm >= 0) pose.roll[refereeArm] = 0.9f + 0.55f * sin(t * 2f * PI.toFloat() * 0.85f)
+        model.walk(refPlace, pose) { x0, y0, z0, x1, y1, z1, pi ->
+            // his own figure's tones, pulled toward the player's green: he is yours, not the ring's
+            val c = model.parts[pi].color
+            val r = c[0] * 0.35f + ACID[0] * 0.65f
+            val g = c[1] * 0.55f + ACID[1] * 0.45f
+            val b2 = c[2] * 0.35f + ACID[2] * 0.65f
+            lines.v(x0, y0, z0, r, g, b2, a); lines.v(x1, y1, z1, r, g, b2, a)
+        }
+
+        // --- HIS SECOND, standing over him across the ring. The same figure a third time, in the
+        // other man's colours — and it is the cheapest thing in this whole scene, because two
+        // people in a corner is what a corner LOOKS like. One man sitting alone reads as a bug.
+        refPlace.x = Fight.HIS_CORNER_X + 0.52f
+        refPlace.y = 0f
+        refPlace.z = Fight.HIS_CORNER_Z + 0.10f
+        // HE FACES THE CAMERA AND LEANS WITH HIS ROLL. Yawing him toward his own fighter turned
+        // him edge-on and drew a magenta sliver — a `StrokeModel` is a flat figure in its own
+        // plane, not a billboard, so a 90-degree yaw is a line. The same mistake the title
+        // screen's boxer taught, in a different place; the lean has to come from the roll.
+        refPlace.yaw = atan2(-(camX - refPlace.x), -(camZ - refPlace.z))
+        refPlace.roll = -0.16f + 0.035f * sin(t * 2f * PI.toFloat() * 0.5f)   // stooped over his man
+        refPlace.scale = 0.96f
+        pose.reset()
+        if (refereeArm >= 0) pose.roll[refereeArm] = -0.7f + 0.25f * sin(t * 2f * PI.toFloat() * 0.7f)
+        val sc = fight.fighter.primary
+        val sa = 0.55f * k * fightDim
+        model.walk(refPlace, pose) { x0, y0, z0, x1, y1, z1, _ ->
+            lines.v(x0, y0, z0, sc[0], sc[1], sc[2], sa); lines.v(x1, y1, z1, sc[0], sc[1], sc[2], sa)
+        }
+    }
+
+    /** A stool: a seat and three legs, eight strokes, drawn on the canvas at (x, z). */
+    private fun stool(x: Float, z: Float) {
+        val h = 0.42f; val r = 0.17f
+        var px = x + r; var pz = z
+        for (i in 1..6) {
+            val an = i / 6f * 2f * PI.toFloat()
+            val nx = x + r * cos(an); val nz = z + r * sin(an)
+            wline(px, h, pz, nx, h, nz); px = nx; pz = nz
+        }
+        for (i in 0 until 3) {
+            val an = i / 3f * 2f * PI.toFloat() + 0.5f
+            wline(x + r * 0.8f * cos(an), h, z + r * 0.8f * sin(an), x + r * 0.95f * cos(an), 0f, z + r * 0.95f * sin(an))
+        }
+    }
+
     private fun refereeScene(dt: Float) {
         val f = fight
         val counting = f.state == State.KNOCKDOWN_COUNT
@@ -1506,6 +1618,12 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         /** The low guard's cue: how far the forearms mix toward white, their gain, and the hatch's step. */
         /** The attract's brightness behind the start menu: wallpaper, not a fight. */
         const val TITLE_DIM = 0.30f
+        /** How far a seated man drops on his stool, and how much smaller he gets folded up. */
+        const val SEAT_SINK = 0.34f
+        /** The coach, folded down onto his heels in front of a seated fighter. */
+        const val COACH_CROUCH = -0.36f
+        const val COACH_SCALE = 0.94f
+        const val SEAT_SQUASH = 0.90f
         /** …and off to one side of it, so the start menu has the centre column to itself. */
         const val TITLE_SHIFT_X = 1.45f
         const val LOW_MIX = 0.35f

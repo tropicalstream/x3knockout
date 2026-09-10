@@ -294,6 +294,15 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         /** `tip_step` after this many body steps rejected during pad blanks. */
         const val STEP_REJECT_TIP_N = 3
         /** The crowd chants after you have been hit this many times without answering. */
+        /** The stool: how far the eye drops, and how long it takes (real seconds, both ways). */
+        const val SEAT_DROP = 0.42f
+        const val SEAT_T = 0.45f
+        /** His corner, and his second's mark beside it. */
+        const val HIS_CORNER_X = 1.75f
+        const val HIS_CORNER_Z = -4.35f
+        /** Your trainer, in your face: he is the closest thing the game ever draws. */
+        const val COACH_X = 0.18f
+        const val COACH_Z = -1.38f
         /** How long a cheer takes to die down, real seconds. */
         const val CROWD_SURGE_T = 1.6f
         /** Yours, landed and unanswered, before the room starts chanting your name. */
@@ -573,6 +582,18 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     var crowdSurge = 0f; private set
     /** True from the knockout until the next ceremony: the room does not calm down in between. */
     private var crowdHold = false
+    /**
+     * YOU SIT DOWN BETWEEN ROUNDS (the owner, 2026-09-10: *"there be a short between match rounds
+     * where the players are shown sitting and the coach interacting with them"*).
+     *
+     * 0 standing, 1 on the stool, eased on REAL time — the corner is outside the fight, like the
+     * count and the cards. One number, and it is the whole of the staging: the renderer drops the
+     * EYE by [SEAT_DROP] against it, which puts the ropes above the player's head and the coach's
+     * face at theirs, and moves the man in the other corner to his own stool by the same fraction.
+     * A camera move is worth more here than any amount of drawing: you do not look at a man
+     * sitting down, you sit down.
+     */
+    var seatK = 0f; private set
     /** Yours, landed, unanswered — the mirror of [hitsUnanswered], and what the room chants on. */
     private var landedUnanswered = 0
     private var putHimAwaySaid = false
@@ -1356,7 +1377,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         stepsRejected = 0; rejectArmed = true; stepTipOwed = false; hitBy.fill(0); hitsUnanswered = 0; answerSeen.fill(0)
         putHimAwaySaid = false; stickSaid = false; nextHand = Hand.LEFT; specialThrownRound = false
         stillT = 0f; sink = 0f; koRoarT = 0f; countStarted = false; downWho = null; chant = ""; chantT = 0f
-        crowdSurge = 0f; crowdHold = false; landedUnanswered = 0
+        crowdSurge = 0f; crowdHold = false; landedUnanswered = 0; seatK = 0f
         debugHp = 0; scriptT = 0f; scriptStep = 0
         tally = emptyList()
         clearVerbs()
@@ -1645,6 +1666,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
         // everything on the plate is on the player's clock, menu or no menu
         plate(dt)
+        if (state != State.ROUND_END && seatK > 0f) seatK = max(0f, seatK - dt / SEAT_T)
         if (menuOpen || creditsOpen) return
 
         when (state) {
@@ -1663,6 +1685,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
             State.KNOCKDOWN_COUNT -> { body(dt); fightRealT += dt; updateCount(dt) }
             State.ROUND_END -> {
                 body(dt); fightRealT += dt; boxer.update(clock.wdt, dt, body)
+                seatK = min(1f, seatK + dt / SEAT_T)
                 if (clock.forced != Clock.Forced.CORNER && stateT >= cornerHold) { round++; enterRoundCard() }
             }
             // THE TALLY HANDS OVER BY ITSELF. This branch had no timer at all: the only way off the

@@ -123,6 +123,25 @@ class CareerTest {
     }
 
     @Test
+    fun theCornerSitsYouDownAndTheBellStandsYouUp() {
+        // The owner: "there be a short between match rounds where the players are shown sitting
+        // and the coach interacting with them." The whole staging hangs off one eased number —
+        // the renderer drops the EYE by it, walks the other man to his stool by it, and fades
+        // the coach in with it — so this is the test that keeps the scene from silently going
+        // missing when somebody touches the round-end.
+        // the drill, so the round can actually reach its bell: a still player takes no damage
+        // in one, and a still player is the only kind a desk harness has
+        val r = Desk.Rig()
+        r.toFight()
+        assertEquals("on your feet during the round", 0f, r.fight.seatK, 1e-4f)
+        assertTrue("the round ends", r.until(Fight.ROUND_WORLD_S + 4f) { r.fight.state == State.ROUND_END })
+        assertTrue("you sit down", r.until(Fight.SEAT_T + 0.5f) { r.fight.seatK > 0.98f })
+        assertTrue("the trainer has something to say", r.host.said.isNotEmpty())
+        assertTrue("the bell sends you back out", r.until(20f) { r.fight.state == State.ROUND_CARD || r.fight.state == State.FIGHT })
+        assertTrue("...and you stand up again", r.until(Fight.SEAT_T + 0.5f) { r.fight.seatK < 0.02f })
+    }
+
+    @Test
     fun theCareerTotalSurvivesTheBoutTheScoreDoesNot() {
         val r = Desk.Rig()
         r.toBout(0, hp = 30)
