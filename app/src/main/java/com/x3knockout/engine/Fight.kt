@@ -261,7 +261,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
          * least the floor whatever the bus says, and at most the ceiling whatever it does not.
          */
         const val INTRO_MIN_T = 3.0f
-        const val INTRO_MAX_T = 22f
+        const val INTRO_MAX_T = 27f
         /** After the continue countdown expires the card returns to the attract by itself. */
         const val GAMEOVER_HOLD_T = 3.0f
         /** Rise from your own knockdown: 8 alternated taps before "10"; a same-hand double counts once. */
@@ -560,6 +560,8 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
     /** The crowd bed's lagged level (real), the meter's `put_him_away` latch, the KO's real time. */
     private var crowdLevel = 0f
     private var putHimAwaySaid = false
+    /** The trainer's round-1 stall line, once a round: the boo repeats, the sentence does not. */
+    private var stickSaid = false
     private var koRealMs = 0
     private var warbleT = 0f
     private val rng = Random(7)
@@ -1284,7 +1286,7 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
         hp = HP_MAX; hearts = HEARTS; heartRefillT = 0f; meter = 0; meterShown = 0f; chain = 0
         knockdownsYou = 0; knockdownsYouRound = 0; noDecision = false; fightRealT = 0f; koRealMs = 0
         stepsRejected = 0; rejectArmed = true; stepTipOwed = false; hitBy.fill(0); hitsUnanswered = 0; answerSeen.fill(0)
-        putHimAwaySaid = false; nextHand = Hand.LEFT; specialThrownRound = false
+        putHimAwaySaid = false; stickSaid = false; nextHand = Hand.LEFT; specialThrownRound = false
         stillT = 0f; sink = 0f; koRoarT = 0f; countStarted = false; downWho = null; chant = ""; chantT = 0f
         debugHp = 0; scriptT = 0f; scriptStep = 0
         tally = emptyList()
@@ -2056,7 +2058,11 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
 
     override fun onStall(round: Int) {
         host.sfx(Sfx.BOO, 1f, 0.6f)
-        if (round == 1) host.say(Lines.STICK_AND_MOVE, false, 2000L)
+        // THE TRAINER SAYS IT ONCE A ROUND. The stall timer re-arms every three seconds, so a
+        // player standing still — which, under a time law that rewards standing still, is a
+        // reasonable thing to be doing — was told to stick and move four times in twelve seconds.
+        // The boo is the repeatable half of the feedback; the sentence is not.
+        if (round == 1 && !stickSaid) { stickSaid = true; host.say(Lines.STICK_AND_MOVE, false, 2000L) }
         hitBy[HIT_STILL]++
         ev("STALL round=$round still=%.1f".format(Locale.US, stillT))
     }

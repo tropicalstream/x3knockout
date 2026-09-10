@@ -9,7 +9,7 @@ the chains live here beside each other where a change to one can be heard agains
 
     ANNOUNCER  fish.audio, one model, in a big room   the showman on the house PA
     REFEREE    fish.audio, one model, one short slap  in the ring with you, no microphone
-    CORNER     macOS Grandpa, close, no room at all   the old trainer at your ear
+    CORNER     fish.audio, close, no room at all      the old trainer at your ear
     BOXER      fish.audio, FIVE DIFFERENT MODELS      five men, five actual voices
     CROWD      six macOS voices detuned and summed    a crowd is many people, not one voice
 
@@ -20,9 +20,10 @@ and a heavyweight are not the same performance at different speeds. Now the anno
 and each of the five men are separate fish.audio models chosen by the owner, and THE PITCH SHIFTS
 ARE GONE -- shifting a cast voice would undo the casting.
 
-The corner is still macOS Grandpa, because no model was named for him. He is the one voice that is
-never in the room with the crowd (he is 30 cm from your ear, dry, no reverb at all), which is what
-keeps him legible next to five human voices.
+The corner was the last hold-out on macOS and the owner named him too (2026-09-10). He is the one
+voice that is never in the room with the crowd -- 30 cm from your ear, dry, no reverb at all --
+which is what keeps him legible next to six other human voices, and he is also the voice that
+carries the story, so he is the last one that could have stayed synthetic.
 
 Writes assets/voice/<id>.m4a (ANNOUNCER, REFEREE, CORNER, CROWD), assets/voice_hero/<id>.mp3
 (BOXER), plus a manifest.json of clip durations in ms per directory -- the introduction sequence
@@ -60,6 +61,7 @@ CHAINS = {"ANNOUNCER": ANNOUNCER_CHAIN, "REFEREE": REFEREE_CHAIN, "CORNER": CORN
 FISH_VOICE = {
     "ANNOUNCER": "ac192aa6102d4d669e1af4e4351cf89d",
     "REFEREE": "1443bdae8a9546d6bb451cc4816cfdfd",
+    "CORNER": "f54c4c98cacc4c12ba3d897c5a866a4b",
 }
 # THE FIVE MEN, five models, in card order. The id suffix on a clip picks the man: `that_all_anvil`
 # is Duke Odell's own voice, and a BOXER clip with no suffix is the fallback the engine reaches for
@@ -75,7 +77,8 @@ BOXER_VOICE = {
 FALLBACK_BOXER = "rooster"
 # The announcer names the men too, so an `intro_anvil` is the ANNOUNCER's model, not the Anvil's.
 # That is why the fighter suffix is only ever read for the BOXER speaker.
-VOICES = {"CORNER": ("Grandpa", 176)}
+# Nothing is left on macOS `say` but the crowd, which is a spread and not a person.
+VOICES: dict = {}
 # A crowd is MANY PEOPLE. Six different voices at slightly different rates, detuned and offset.
 CROWD_VOICES = [("Eddy", 150), ("Sandy", 146), ("Junior", 156), ("Shelley", 144), ("Flo", 152), ("Karen", 148)]
 SPEAKER_DIR = {"ANNOUNCER": "voice", "REFEREE": "voice", "CORNER": "voice", "CROWD": "voice",

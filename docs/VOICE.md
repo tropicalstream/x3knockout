@@ -55,6 +55,7 @@ So the owner picked seven models by URL, and they are the cast:
 |---|---|---|---|
 | ANNOUNCER | `ac192aa6102d4d669e1af4e4351cf89d` | long double echo + gentle compression | the house PA: the institution, the city, the number, the title |
 | REFEREE | `1443bdae8a9546d6bb451cc4816cfdfd` | one 38 ms slap + firmer compression | in the ring with you, no microphone |
+| CORNER | `f54c4c98cacc4c12ba3d897c5a866a4b` | compression only, NO room | the old trainer, 30 cm from your ear |
 | rooster | `1bf2dee1ca2848b5bc0580a4d9301341` | the shared BOXER slap | 120 lb of showboat, too pleased with himself |
 | sardine | `97050f3ee6dd49f8b2b58de51ed21269` | " | never says one thing either |
 | anvil | `44db4aafb5ff45a7b268beaeead5dec7` | " | a wardrobe talking |
@@ -65,11 +66,14 @@ So the owner picked seven models by URL, and they are the cast:
 there to fake a difference that is now real. All five men share the one `BOXER_CHAIN` so they
 stand in the same physical space and differ only as people, which is exactly what §1 asks of them.
 
-**THE CORNER IS STILL macOS GRANDPA**, and it is the one hole in the cast: no model was named for
-him. He survives it better than any other position would, because he is the only voice that is
-never in the room — 30 cm from the player's ear, dry, no reverb at all — so he is separated by
-SPACE rather than by timbre. He is also the voice that carries the story (§6.6), which is an
-argument for recasting him the moment there is an eighth URL: `FISH_VOICE["CORNER"]` is one line.
+**THE CORNER WAS THE LAST HOLD-OUT AND HE IS CAST TOO.** He is the only voice that is never in the
+room — 30 cm from the player's ear, dry, no reverb at all — so he is separated from the other six
+by SPACE as well as by timbre, and his chain is the only one with no `aecho` in it at all. He also
+carries the story (§6.6), which made him the last position that could have stayed synthetic.
+
+**NOTHING IS LEFT ON macOS `say` BUT THE CROWD**, which is not a person: six voices detuned ±40
+cents and offset 30–90 ms, summed. A crowd rendered from one real voice six times is a chorus,
+which is what it sounded like the first time.
 
 **A CLIP'S VOICE IS ITS SPEAKER, EXCEPT FOR THE MAN IN THE RING.** `render_voices.fish_id` reads
 the fighter suffix ONLY for the `BOXER` speaker, so `intro_anvil` is the ANNOUNCER naming Duke
