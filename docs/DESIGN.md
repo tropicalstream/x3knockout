@@ -1,5 +1,15 @@
 # X3 KNOCKOUT — GAME DESIGN DOCUMENT (prototype: one boxer)
 
+> **AMENDED 2026-09-09 — the owner's ruling (commit `13741bd`; applied to BOXER.md's tables and to
+> the code).** Every punch travels on **world** time, his and yours. Where §0, §2.2, §2.4, §2.6 and
+> §2.9 below call his STRIKE a forced real-time state (`Forced.STRIKE`, rate 1.0), read instead: the
+> glove in flight advances on `wdt` under the same hang-then-fuse floor as the tell it came out of
+> (`Boxer.floorNow`), so a still player watches it crawl and hang, and the fuse — still burning on
+> real time through the strike — brings it the rest of the way. Your own punch keeps its
+> `Forced.PUNCH` window: a forced rate the game declares openly on the rail is one of the honest
+> pressures the ruling names. `Clock.forceStrike` remains for the tests and the lab; the fight no
+> longer calls it, and a `forced=STRIKE` in a `CLK` line means somebody put it back.
+
 RayNeo X3 Pro (ARGF20). A 1280×480 side-by-side surface, each eye 640×480, the same image on both
 — never called 3D. Waveguide microLED: black is transparent, so the game is glowing strokes on the
 real room; "dark" means a black ground and FULLY SATURATED hues with small white-hot cores, never

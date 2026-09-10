@@ -1,4 +1,4 @@
-// X3Knockout — first-person vector tank vs. Recognizers for the RayNeo X3 Pro.
+// X3Knockout — an arcade boxing cabinet (in the spirit of the 1984 Punch-Out!!) for the RayNeo X3 Pro.
 // Same on-device-proven toolchain as the rest of the suite: gradle 8.9 / AGP 8.7.3 / Kotlin 2.0.21 / JDK 17.
 plugins {
     id("com.android.application") version "8.7.3" apply false

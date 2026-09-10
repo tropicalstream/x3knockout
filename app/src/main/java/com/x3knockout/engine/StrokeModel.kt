@@ -135,7 +135,7 @@ class StrokeModel private constructor(val name: String, val parts: List<Part>) {
          * missing figure is a better failure on the glass than a crash mid-round.
          */
         fun parse(text: String, fallbackName: String = "?"): StrokeModel {
-            val doc = Reader(text).value() as? Map<*, *> ?: throw IllegalArgumentException("model is not an object")
+            val doc = Json(text).value() as? Map<*, *> ?: throw IllegalArgumentException("model is not an object")
             val raw = doc["parts"] as? List<*> ?: emptyList<Any?>()
             val order = ArrayList<String>(raw.size)
             val colors = HashMap<String, FloatArray>()
@@ -185,98 +185,103 @@ class StrokeModel private constructor(val name: String, val parts: List<Part>) {
             return if (at == out.size) out else out.copyOf(at)
         }
 
-        /**
-         * Sixty lines of JSON reader so the model path owes nothing to the framework (see [parse]).
-         * It is a complete reader of the subset `json.dump` emits — objects, arrays, strings with
-         * the standard escapes, numbers, the three literals — and every number comes back as a
-         * `Double`, which is what [vec3] and [segsOf] expect. Running off the end of a truncated
-         * file throws out of `s[i]`, and that is the intended report: the caller wants to know.
-         */
-        private class Reader(private val s: String) {
-            private var i = 0
+    }
 
-            fun value(): Any? {
+    /**
+     * Sixty lines of JSON reader so the model path owes nothing to the framework (see [parse]).
+     * It is a complete reader of the subset `json.dump` emits — objects, arrays, strings with
+     * the standard escapes, numbers, the three literals — and every number comes back as a
+     * `Double`, which is what [vec3] and [segsOf] expect. Running off the end of a truncated
+     * file throws out of `s[i]`, and that is the intended report: the caller wants to know.
+     *
+     * `internal`, not private: `Poses.kt`'s `StripSet.parse` reads the sprite manifest with
+     * the same reader for the same reason this class has one (a JVM test over the shipping
+     * asset, with no `org.json` stub handing back an empty document).
+     */
+    internal class Json(private val s: String) {
+        private var i = 0
+
+        fun value(): Any? {
+            ws()
+            return when (s[i]) {
+                '{' -> obj()
+                '[' -> arr()
+                '"' -> str()
+                't' -> { word("true"); true }
+                'f' -> { word("false"); false }
+                'n' -> { word("null"); null }
+                else -> num()
+            }
+        }
+
+        private fun ws() { while (i < s.length && s[i].isWhitespace()) i++ }
+
+        private fun expect(c: Char) {
+            ws()
+            require(i < s.length && s[i] == c) { "expected '$c' at $i" }
+            i++
+        }
+
+        private fun word(w: String) {
+            require(s.startsWith(w, i)) { "expected $w at $i" }
+            i += w.length
+        }
+
+        private fun obj(): Map<String, Any?> {
+            expect('{')
+            val m = LinkedHashMap<String, Any?>()
+            ws()
+            if (s[i] == '}') { i++; return m }
+            while (true) {
                 ws()
-                return when (s[i]) {
-                    '{' -> obj()
-                    '[' -> arr()
-                    '"' -> str()
-                    't' -> { word("true"); true }
-                    'f' -> { word("false"); false }
-                    'n' -> { word("null"); null }
-                    else -> num()
-                }
-            }
-
-            private fun ws() { while (i < s.length && s[i].isWhitespace()) i++ }
-
-            private fun expect(c: Char) {
+                val k = str()
+                expect(':')
+                m[k] = value()
                 ws()
-                require(i < s.length && s[i] == c) { "expected '$c' at $i" }
-                i++
+                if (s[i] == ',') { i++; continue }
+                expect('}'); return m
             }
+        }
 
-            private fun word(w: String) {
-                require(s.startsWith(w, i)) { "expected $w at $i" }
-                i += w.length
-            }
-
-            private fun obj(): Map<String, Any?> {
-                expect('{')
-                val m = LinkedHashMap<String, Any?>()
+        private fun arr(): List<Any?> {
+            expect('[')
+            val l = ArrayList<Any?>()
+            ws()
+            if (s[i] == ']') { i++; return l }
+            while (true) {
+                l.add(value())
                 ws()
-                if (s[i] == '}') { i++; return m }
-                while (true) {
-                    ws()
-                    val k = str()
-                    expect(':')
-                    m[k] = value()
-                    ws()
-                    if (s[i] == ',') { i++; continue }
-                    expect('}'); return m
-                }
+                if (s[i] == ',') { i++; continue }
+                expect(']'); return l
             }
+        }
 
-            private fun arr(): List<Any?> {
-                expect('[')
-                val l = ArrayList<Any?>()
-                ws()
-                if (s[i] == ']') { i++; return l }
-                while (true) {
-                    l.add(value())
-                    ws()
-                    if (s[i] == ',') { i++; continue }
-                    expect(']'); return l
-                }
-            }
-
-            private fun str(): String {
-                expect('"')
-                val b = StringBuilder()
-                while (true) {
-                    val c = s[i++]
-                    when {
-                        c == '"' -> return b.toString()
-                        c != '\\' -> b.append(c)
-                        else -> when (val e = s[i++]) {
-                            '"', '\\', '/' -> b.append(e)
-                            'b' -> b.append('\b')
-                            'f' -> b.append('\u000C')
-                            'n' -> b.append('\n')
-                            'r' -> b.append('\r')
-                            't' -> b.append('\t')
-                            'u' -> { b.append(s.substring(i, i + 4).toInt(16).toChar()); i += 4 }
-                            else -> throw IllegalArgumentException("bad escape \\$e at $i")
-                        }
+        private fun str(): String {
+            expect('"')
+            val b = StringBuilder()
+            while (true) {
+                val c = s[i++]
+                when {
+                    c == '"' -> return b.toString()
+                    c != '\\' -> b.append(c)
+                    else -> when (val e = s[i++]) {
+                        '"', '\\', '/' -> b.append(e)
+                        'b' -> b.append('\b')
+                        'f' -> b.append('\u000C')
+                        'n' -> b.append('\n')
+                        'r' -> b.append('\r')
+                        't' -> b.append('\t')
+                        'u' -> { b.append(s.substring(i, i + 4).toInt(16).toChar()); i += 4 }
+                        else -> throw IllegalArgumentException("bad escape \\$e at $i")
                     }
                 }
             }
+        }
 
-            private fun num(): Double {
-                val from = i
-                while (i < s.length && (s[i] in '0'..'9' || s[i] == '-' || s[i] == '+' || s[i] == '.' || s[i] == 'e' || s[i] == 'E')) i++
-                return s.substring(from, i).toDouble()
-            }
+        private fun num(): Double {
+            val from = i
+            while (i < s.length && (s[i] in '0'..'9' || s[i] == '-' || s[i] == '+' || s[i] == '.' || s[i] == 'e' || s[i] == 'E')) i++
+            return s.substring(from, i).toDouble()
         }
     }
 }

@@ -4,20 +4,24 @@ import android.content.Context
 import android.os.Build
 
 /**
- * Persistent settings, records and story flags. RayNeo detection follows guide gotcha #24 (never
+ * Persistent settings and records. RayNeo detection follows guide gotcha #24 (never
  * `Build.MODEL` alone).
  *
- * THREE PREFS FILES' WORTH OF DATA, TWO OF THEM IN ONE FILE AND ONE DELIBERATELY OUTSIDE IT.
- * Settings and records share `x3knockout`; the story flags live in `x3knockout_story` because
- * `RESET SETTINGS` must be a thing the player can reach for without wondering whether it will
- * un-remember what they did to a disarmed program in Level 2 (DESIGN.md §11, STORY.md §6). The
- * separation is enforced by [resetSettings] naming its keys one at a time rather than calling
- * `clear()` — a `clear()` here would take the high score with it, and a `clear()` on the story file
- * is what the second prefs file exists to make impossible to write by accident.
+ * TWO PREFS FILES. Settings and records share `x3knockout`; the champion flag lives in
+ * `x3knockout_story` because `RESET SETTINGS` must be a thing the player can reach for without
+ * wondering whether it will un-remember the win (DESIGN.md §11: "the story prefs file is kept for
+ * the champion flag"). The separation is enforced by [resetSettings] naming its keys one at a time
+ * rather than calling `clear()` — a `clear()` here would take the high score with it.
+ *
+ * THE ROWS ARE DESIGN.md §11, in its order: MUSIC · VOLUME · VOICE · DIFFICULTY · DODGE SENSE ·
+ * STEP SENSE · LEFT PAD · CAPTIONS · MOTION LAB · (lab) TIME FLOOR · HANG · PITCH COMP · DRILL ·
+ * (lab, debug) KNEE · CREDITS · RESET SETTINGS · QUIT. `HOP` and `HOP T` from x3discs are gone:
+ * the step is the swipe and the body, and its duration ladder lives in `Clock.STEP_T_CHOICES` for
+ * the lab alone.
  */
 class SettingsStore(context: Context) {
     private val p = context.getSharedPreferences("x3knockout", Context.MODE_PRIVATE)
-    /** The flags STORY.md §6 keeps across runs. Never touched by [resetSettings]. */
+    /** The champion flag, and nothing else. Never touched by [resetSettings]. */
     private val story = context.getSharedPreferences("x3knockout_story", Context.MODE_PRIVATE)
 
     private val deviceText = listOf(Build.MODEL, Build.MANUFACTURER, Build.BRAND, Build.DEVICE, Build.PRODUCT)
@@ -26,23 +30,38 @@ class SettingsStore(context: Context) {
     val sbs get() = isRayNeoX3
 
     /**
-     * RECORDS ARE REFUSED FROM A DEBUG LAUNCH. `am start … --ei level 5` puts the player halfway up
-     * the ladder with three lives and no history, and a score set from there is not a score
-     * (TEST_PLAN.md §1). `MainActivity` sets this before the game boots; nothing else may.
+     * RECORDS ARE REFUSED FROM A DEBUG LAUNCH. `am start … --ei round 3 --ei hp 20` puts the
+     * player two rounds in against a boxer on his last legs, and a score set from there is not a
+     * score (TEST.md §1, "Records discipline"). `MainActivity` sets this before the fight boots;
+     * nothing else may.
      */
     @Volatile var recordsEnabled = true
 
+    // ------------------------------------------------------------------ records (kept by RESET)
     var highScore: Int
         get() = p.getInt("hi", 0)
         set(v) { if (recordsEnabled && v > highScore) p.edit().putInt("hi", v).apply() }
-    /** The highest level ever CLEARED on this device. */
-    var bestLevel: Int
-        get() = p.getInt("bestLevel", 0)
-        set(v) { if (recordsEnabled && v > bestLevel) p.edit().putInt("bestLevel", v).apply() }
-    var games: Int
-        get() = p.getInt("games", 0)
-        set(v) { if (recordsEnabled) p.edit().putInt("games", v).apply() }
+    /**
+     * THE FASTEST KNOCKOUT, real milliseconds from the first bell; 0 = none yet. `BEST KO 1:23` on
+     * the title's records line (DESIGN.md §5.4) — the one place REAL time is judged, and the
+     * record the score chase is really about.
+     */
+    var bestKoMs: Int
+        get() = p.getInt("bestKo", 0)
+        set(v) { if (recordsEnabled && v > 0 && (bestKoMs == 0 || v < bestKoMs)) p.edit().putInt("bestKo", v).apply() }
+    var fights: Int
+        get() = p.getInt("fights", 0)
+        set(v) { if (recordsEnabled) p.edit().putInt("fights", v).apply() }
+    /**
+     * Has a knockdown ever been scored on this device? DIFFICULTY defaults to EASY until it has
+     * (DESIGN.md §5.6, the suite's "EASY until the first clear"), then to NORMAL — unless the
+     * player has set the row by hand, in which case their choice stands either way.
+     */
+    var knockdownScored: Boolean
+        get() = p.getBoolean("kd1", false)
+        set(v) { if (recordsEnabled && v) p.edit().putBoolean("kd1", true).apply() }
 
+    // ------------------------------------------------------------------ settings
     var music: Boolean
         get() = p.getBoolean("music", true)
         set(v) = p.edit().putBoolean("music", v).apply()
@@ -53,83 +72,102 @@ class SettingsStore(context: Context) {
     var voice: Boolean
         get() = p.getBoolean("voice", true)
         set(v) = p.edit().putBoolean("voice", v).apply()
+    /** 0 = EASY, 1 = NORMAL, 2 = HARD (DESIGN.md §5.6). See [knockdownScored] for the default. */
+    var difficulty: Int
+        get() = p.getInt("diff", if (knockdownScored) 1 else 0)
+        set(v) = p.edit().putInt("diff", v.coerceIn(0, 2)).apply()
     /**
-     * The MOTION LAB plate: the body signals drawn live on the glass — the rate, the action charge,
-     * the pad-blank window, the posture dial, the step counts. It exists so the owner can stand up
-     * and SEE what the glasses feel, and it is the instrument every test in TEST_PLAN.md Block A is
-     * read on. Default ON in the prototype (BUILD_PLAN §1), OFF at ship.
+     * 0 = LOW, 1 = MEDIUM, 2 = HIGH: the nod and the tilt that count as a full duck and a full
+     * slip — 29° / 22° (the on-disk numbers), 22° / 16° (ships), 16° / 12°. A boxing round asks
+     * for a dodge every few seconds, not once a level, and the neck decides this row standing up
+     * (DESIGN.md §1.3, TEST.md A2 / D3).
+     */
+    var dodgeSense: Int
+        get() = p.getInt("dodgeSense", 1)
+        set(v) = p.edit().putInt("dodgeSense", v.coerceIn(0, 2)).apply()
+    /** 0 = LOW, 1 = MEDIUM, 2 = HIGH: how hard a sidestep has to push before it counts. */
+    var stepSense: Int
+        get() = p.getInt("stepSense", 1)
+        set(v) = p.edit().putInt("stepSense", v.coerceIn(0, 2)).apply()
+    /**
+     * THE FALLBACK SHIPS IN THE SAME BUILD (DESIGN.md §1.5). OFF = right-pad taps alternate hands
+     * by rhythm and swipe UP is the special; the fight is fully playable one-handed and only the
+     * "both temples" beat is lost. It goes OFF if TEST.md L1–L3 fail the left pad.
+     *
+     * What OFF means at the pad (`MainActivity.leftPad`): the left temple is still READ — every
+     * event still logs its `PAD dev=cyttsp6_mt` line, still blanks the step recogniser, and a tap
+     * still stamps the key-echo clock so a phantom key the service injects for it is still
+     * dropped (that phantom is one of the three failures OFF exists for) — but it throws nothing
+     * and it pairs with nothing. ON is the default because INPUT_LEFTPAD.md measured a single
+     * left tap reaching the app with nothing system-side following it.
+     */
+    var leftPad: Boolean
+        get() = p.getBoolean("leftPad", true)
+        set(v) = p.edit().putBoolean("leftPad", v).apply()
+    /** 0 = AUTO (the answer word for the first two of each attack), 1 = ON (always), 2 = OFF. */
+    var captions: Int
+        get() = p.getInt("captions", 0)
+        set(v) = p.edit().putInt("captions", v.coerceIn(0, 2)).apply()
+    /**
+     * The MOTION LAB plate: the body signals drawn live on the glass, the lab rows below, and
+     * the DRILL instrument. It exists so the owner can stand up and SEE what the glasses feel,
+     * and it is the instrument every test in TEST.md §2 is read on. Default ON in the prototype,
+     * OFF at ship.
      */
     var lab: Boolean
         get() = p.getBoolean("lab", true)
         set(v) = p.edit().putBoolean("lab", v).apply()
     /**
-     * THE LAB'S FLOOR OVERRIDE, 0..4 → 3 / 5 / 8 / 12 / 20 % (DESIGN.md §11).
-     *
-     * It only has any effect while [lab] is on: with the lab off the floor follows DIFFICULTY
-     * (3 / 5 / 8 %), which is the shipping rule, and this row is not even shown. That is why there
-     * is no sixth "AUTO" value — turning the lab off IS how the override is turned off, and one
-     * switch that means one thing beats two switches that have to agree.
+     * THE LAB'S FLOOR OVERRIDE, 0..4 → 3 / 5 / 8 / 12 / 20 % — the BASE floor only (the title,
+     * the menus, and what the fight's own floor table falls back to). It only has any effect
+     * while [lab] is on; there is no sixth "AUTO" value because turning the lab off IS how the
+     * override is turned off.
      */
     var timeFloor: Int
         get() = p.getInt("floor", 1)
         set(v) = p.edit().putInt("floor", v.coerceIn(0, 4)).apply()
-    /** 0 = LOW, 1 = MEDIUM, 2 = HIGH: how hard a sidestep has to push before it counts. */
-    var stepSense: Int
-        get() = p.getInt("stepSense", 1)
-        set(v) = p.edit().putInt("stepSense", v.coerceIn(0, 2)).apply()
-    /** 0 = EASY, 1 = NORMAL, 2 = HARD. EASY until Level 1 has been cleared (DESIGN.md §8.4). */
-    var difficulty: Int
-        get() = p.getInt("diff", 0)
-        set(v) = p.edit().putInt("diff", v.coerceIn(0, 2)).apply()
+    /** Lab only: `HANG_T` 0 = 0.5 s, 1 = 0.8 s, 2 = 1.2 s — overrides the difficulty's hang (DESIGN.md §2.2, TEST.md T2). */
+    var hang: Int
+        get() = p.getInt("hang", 1)
+        set(v) = p.edit().putInt("hang", v.coerceIn(0, 2)).apply()
     /**
-     * THE COMFORT FALLBACK, and it ships in the same build as the thing it disables (DESIGN.md
-     * §5, §14.4). OFF fixes the player's platform and pays +2 deflector charges for the escape it
-     * takes away, so the guaranteed pad answer to every lane survives without the vection.
+     * Lab only: how much of a nod the view un-pitches during a duck, 0 = 0 / 1 = 0.5 / 2 = 0.7
+     * (DESIGN.md §14.3). Ships at 0 — a view partly head-locked in pitch is a vestibular
+     * mismatch nobody has tested here — and the owner rules on it (TEST.md V5).
      */
-    var hop: Boolean
-        get() = p.getBoolean("hop", true)
-        set(v) = p.edit().putBoolean("hop", v).apply()
+    var pitchComp: Int
+        get() = p.getInt("pitchComp", 0)
+        set(v) = p.edit().putInt("pitchComp", v.coerceIn(0, 2)).apply()
     /**
      * 0 = KNEE A (`W_REF` 1.2, γ 1.3), 1 = KNEE B (1.9 / 1.8). B ships: MOTION.md measured an
-     * ordinary scan at 0.20 under B against 0.53 under A, and being taxed for reading the room is
-     * the one thing this design exists to prevent. The row is lab-only and debug-only, and it goes
-     * once test A2 has the owner's ruling on it.
+     * ordinary scan at 0.20 under B against 0.53 under A. The row is lab-only and debug-only, and
+     * it goes once test A2 has the owner's ruling on it.
      */
     var knee: Int
         get() = p.getInt("knee", 1)
         set(v) = p.edit().putInt("knee", v.coerceIn(0, 1)).apply()
     /**
-     * The hop's duration, an index into `Clock.HOP_T_CHOICES` (0.28 / 0.35 / 0.45 / 0.60 s). Lab
-     * only: test B4 picks one and then this row goes too.
+     * THE DRILL — lab only, and deliberately NOT persisted: OFF / PECK L / PECK R / WING R /
+     * WING L / SUNRISE / ALL (the indices of `Boxer.Drill`). He throws only that attack every
+     * 2.5 world seconds with no damage either way — the standing test's instrument (TEST.md
+     * Blocks T, V, F). A drill that survived a relaunch would put the next session's first fight
+     * into a harness nobody asked for, so it lives for one process and the `--es drill` launch.
      */
-    var hopT: Int
-        get() = p.getInt("hopT", 1)
-        set(v) = p.edit().putInt("hopT", v.coerceIn(0, 3)).apply()
+    @Volatile var drill = 0
 
-    // ------------------------------------------------------------------ story flags (separate file)
-    /**
-     * Level 2's ruling: true if the player stood still and let the referee do it, false if they
-     * threw. It changes one word on the tally, the pilot's silence for the rest of the level, and
-     * one line of the machine's in Level 11 — and nothing else, because the machine kills either
-     * way and the game does not grade the choice (STORY.md §3, DESIGN.md §8.3).
-     */
-    var mercy: Boolean
-        get() = story.getBoolean("mercy", false)
-        set(v) = story.edit().putBoolean("mercy", v).apply()
-    /** The furthest level a STORY run has reached, so the title can resume it. */
-    var levelReached: Int
-        get() = story.getInt("level", 1)
-        set(v) { if (recordsEnabled && v > levelReached) story.edit().putInt("level", v).apply() }
-    /** How many times the round has restarted on this device — the machine reads it aloud from L5. */
-    var restarts: Int
-        get() = story.getInt("restarts", 0)
-        set(v) { if (recordsEnabled) story.edit().putInt("restarts", v).apply() }
+    // ------------------------------------------------------------------ the champion (separate file)
+    /** Won by knockout at least once: `YOU` becomes `CHAMPION` on the plate (DESIGN.md §8). */
+    var champion: Boolean
+        get() = story.getBoolean("champion", false)
+        set(v) { if (recordsEnabled && v) story.edit().putBoolean("champion", true).apply() }
 
-    /** Settings only. Records are kept; the story flags are in another file entirely and untouched. */
+    /** Settings only. Records are kept; the champion flag is in another file entirely and untouched. */
     fun resetSettings() {
         p.edit()
-            .remove("music").remove("volume").remove("voice").remove("lab").remove("floor")
-            .remove("stepSense").remove("diff").remove("hop").remove("knee").remove("hopT")
+            .remove("music").remove("volume").remove("voice").remove("diff").remove("dodgeSense")
+            .remove("stepSense").remove("leftPad").remove("captions").remove("lab").remove("floor")
+            .remove("hang").remove("pitchComp").remove("knee")
             .apply()
+        drill = 0
     }
 }

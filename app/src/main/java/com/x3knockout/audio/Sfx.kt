@@ -66,7 +66,41 @@ class Sfx(private val context: Context) {
         const val SCATTER = 37      // the arena falls back after a death: the machines reel off
         const val WINDUP = 38       // the disc is coming off the rail — the beat to MOVE on
         const val POOL_TAKE = 39    // the pool pays out: the draw is worth the drive
-        private const val COUNT = 40
+        // ================================================================ THE FIGHT'S BANK
+        // DESIGN.md §9.2: the bank above (FIRE … POOL_TAKE) is x3discs' and is REPLACED by the
+        // names below on the same synthesiser. The ids are kept apart (40+) so the two banks can
+        // coexist while the fight is built; the disc sounds cost nothing shipped (every clip is
+        // generated into the cache at first launch) and go when the new bank has had its pass.
+        //
+        // EVERY CLIP BELOW IS A PLACEHOLDER SYNTHESIS — short, quiet, in the right register — so
+        // that a cue reaches the ear on the first build and the fight can be tuned by feel. The
+        // real voicing (the cluck a fourth higher, the six-voice OH, the crow's doubling) is owed
+        // by whoever takes the audio pass, and each one's brief is in its comment.
+        const val JAB_WHOOSH = 40   // your punch leaving: a short air whoosh, under the music
+        const val HIT_HEAD = 41     // a landed head punch: a snap with a ring on it
+        const val HIT_BODY = 42     // a landed body blow: a 55 Hz thud
+        const val GUARD_THUD = 43   // his glove on your raised guard
+        const val BLOCKED = 44      // yours on his closed guard: the cyan spark's tick
+        const val WHIFF = 45        // air: the whoosh with nothing on the end of it
+        const val CROWD_OH = 46     // the six-voice detuned burst on a landed punch
+        const val HANG = 47         // the held breath: the snap into the deep floor (the tell's first beat)
+        const val TELL_PECK_L = 48  // a short cluck — his left jab is loading
+        const val TELL_PECK_R = 49  // the same cluck a fourth higher — his right cross
+        const val STAMP = 50        // a low thud felt as much as heard: a hook is loading
+        const val WHISTLE = 51      // rising: the body hook
+        const val EXTEND = 52       // his glove in flight: a doppler whoosh
+        const val GLANCE = 53       // half a hit
+        const val STUN_WARBLE = 54  // looping while he is staggered
+        const val KO_LIT = 55       // the KO meter crosses 26: the tone
+        const val SPECIAL = 56      // the Wake-Up Call: a rising fifth into the hit-stop
+        const val BELL = 57         // a struck sine with an inharmonic partial, 1.2 s decay
+        const val CLAPPER = 58      // the wood block on each of the last 10 world seconds
+        const val COUNT_CLICK = 59  // the numeral's pop on the count
+        const val FALL = 60         // a fighter hits the canvas
+        const val ROPES = 61        // the ropes shake after a knockdown
+        const val CROWD_BED = 62    // THE CROWD IS THE RATE METER: the looping bed [crowd] drives (§9.3)
+        const val BOO = 63          // three real seconds still while he is idle
+        private const val COUNT = 64
         private const val RATE = 22050
     }
 
@@ -395,6 +429,36 @@ class Sfx(private val context: Context) {
                     (saw(180f + 260f * sin(3.1416f * t / 0.3f), t) * 0.35f + noise() * 0.12f) * env
                 })
                 ids[HUM] = load(dir, "hum", buf(1000) { t -> sine(58f, t) * 0.35f + sine(116f, t) * 0.15f + saw(29f, t) * 0.12f })
+                // ------------------------------------------------------------ the fight's bank (placeholders)
+                ids[JAB_WHOOSH] = load(dir, "jab", buf(140) { t -> noise() * 0.45f * sin(3.1416f * (t / 0.14f).coerceIn(0f, 1f)) * (0.5f + 0.5f * sine(900f - 600f * t, t)) })
+                ids[HIT_HEAD] = load(dir, "hithead", buf(260) { t -> noise() * 0.8f * exp(-t * 45f) + (sine(1500f, t) * 0.3f + sine(2300f, t) * 0.15f) * exp(-t * 12f) + sq(180f, t) * 0.2f * exp(-t * 20f) })
+                ids[HIT_BODY] = load(dir, "hitbody", buf(320) { t -> sine(55f, t) * 0.8f * exp(-t * 7f) + noise() * 0.5f * exp(-t * 30f) + sq(110f, t) * 0.2f * exp(-t * 12f) })
+                ids[GUARD_THUD] = load(dir, "guardthud", buf(220) { t -> sine(90f, t) * 0.6f * exp(-t * 10f) + noise() * 0.35f * exp(-t * 40f) })
+                ids[BLOCKED] = load(dir, "blocked", buf(120) { t -> (sine(2600f, t) * 0.35f + sq(1300f, t) * 0.1f) * exp(-t * 28f) + noise() * 0.2f * exp(-t * 60f) })
+                ids[WHIFF] = load(dir, "whiff", buf(200) { t -> noise() * 0.3f * sin(3.1416f * (t / 0.2f).coerceIn(0f, 1f)) * (0.5f + 0.5f * sine(600f - 400f * t, t)) })
+                ids[CROWD_OH] = load(dir, "crowdoh", buf(520) { t ->
+                    var v = 0f
+                    for (i in 0 until 6) { val f = 210f * (1f + 0.02f * (i - 2.5f)); val lt = (t - i * 0.012f).coerceAtLeast(0f); v += (saw(f, lt) * 0.12f + sine(f * 2f, lt) * 0.06f) * (1f - exp(-lt * 30f)) }
+                    v *= 0.6f + 0.4f * sine(3f, t)
+                    (v + noise() * 0.08f) * exp(-t * 3.5f)
+                })
+                ids[HANG] = load(dir, "hang", buf(360) { t -> (sine(220f - 140f * (t / 0.36f).coerceIn(0f, 1f), t) * 0.3f + noise() * 0.06f) * (1f - exp(-t * 200f)) * exp(-t * 6f) })
+                ids[TELL_PECK_L] = load(dir, "cluckl", buf(110) { t -> (sq(880f + 600f * exp(-t * 60f), t) * 0.3f + sine(1760f, t) * 0.1f) * exp(-t * 32f) })
+                ids[TELL_PECK_R] = load(dir, "cluckr", buf(110) { t -> (sq(1174f + 800f * exp(-t * 60f), t) * 0.3f + sine(2348f, t) * 0.1f) * exp(-t * 32f) })
+                ids[STAMP] = load(dir, "stamp", buf(300) { t -> sine(48f + 30f * exp(-t * 20f), t) * 0.85f * exp(-t * 8f) + noise() * 0.3f * exp(-t * 50f) })
+                ids[WHISTLE] = load(dir, "whistle", buf(420) { t -> val u = (t / 0.42f).coerceIn(0f, 1f); sine(600f + 1400f * u * u, t) * 0.3f * sin(3.1416f * u) })
+                ids[EXTEND] = load(dir, "extend", buf(260) { t -> val u = (t / 0.26f).coerceIn(0f, 1f); (noise() * 0.4f * (0.5f + 0.5f * sine(1800f - 1300f * u, t)) + sine(500f - 250f * u, t) * 0.15f) * sin(3.1416f * u) })
+                ids[GLANCE] = load(dir, "glance", buf(160) { t -> noise() * 0.35f * exp(-t * 30f) + sine(700f, t) * 0.2f * exp(-t * 18f) })
+                ids[STUN_WARBLE] = load(dir, "warble", buf(1000) { t -> sine(520f + 90f * sine(3f, t), t) * 0.22f + sine(780f + 90f * sine(3f, t + 0.1f), t) * 0.12f })
+                ids[KO_LIT] = load(dir, "kolit", buf(500) { t -> (sine(1046f, t) * 0.3f + sine(1568f, t) * 0.2f + sq(523f, t) * 0.08f) * (1f - exp(-t * 80f)) * exp(-t * 4f) })
+                ids[SPECIAL] = load(dir, "special", buf(420) { t -> val u = (t / 0.42f).coerceIn(0f, 1f); val f = 330f * (1f + 0.5f * u); (saw(f, t) * 0.3f + sq(f * 2f, t) * 0.12f + noise() * 0.15f * u) * (1f - exp(-t * 100f)) })
+                ids[BELL] = load(dir, "bell", buf(1200) { t -> (sine(1180f, t) * 0.45f + sine(1180f * 2.76f, t) * 0.18f + sine(1180f * 5.4f, t) * 0.08f * exp(-t * 6f)) * exp(-t * 2.6f) * (1f - exp(-t * 400f)) })
+                ids[CLAPPER] = load(dir, "clapper", buf(90) { t -> (sine(1900f, t) * 0.4f + noise() * 0.5f) * exp(-t * 55f) })
+                ids[COUNT_CLICK] = load(dir, "countclick", buf(70) { t -> sq(1500f, t) * 0.35f * exp(-t * 50f) })
+                ids[FALL] = load(dir, "fall", buf(600) { t -> sine(42f + 40f * exp(-t * 12f), t) * 0.9f * exp(-t * 4.5f) + noise() * 0.6f * exp(-t * 25f) + sq(84f, t) * 0.15f * exp(-t * 9f) })
+                ids[ROPES] = load(dir, "ropes", buf(500) { t -> (sine(160f + 20f * sine(9f, t), t) * 0.25f + noise() * 0.12f) * exp(-t * 4f) })
+                ids[CROWD_BED] = load(dir, "crowdbed", buf(2000) { t -> var v = 0f; for (i in 0 until 5) v += saw(70f + i * 37f, t) * 0.05f; (v + noise() * 0.35f) * (0.75f + 0.25f * sine(0.5f, t)) })
+                ids[BOO] = load(dir, "boo", buf(900) { t -> var v = 0f; for (i in 0 until 5) v += saw(150f - 40f * (t / 0.9f) + i * 3f, t) * 0.1f; v * (1f - exp(-t * 20f)) * exp(-t * 2.2f) })
                 loaded = true
             }
         }
@@ -422,6 +486,26 @@ class Sfx(private val context: Context) {
     }
 
     fun stopHum() { handler?.post { if (humStream != 0) { pool.stop(humStream); humStream = 0 } } }
+
+    /**
+     * THE CROWD IS THE RATE METER, IN REAL TIME (DESIGN.md §9.3): a looping noise bed whose
+     * loudness follows `Clock.timeScale` with a ≈ 200 ms lag — a held breath at the floor, a roar
+     * at rate 1 — so the owner hears the world freeze without looking at a rail (TEST.md T5).
+     * [level] 0..1 is the loudness; [rate] pitches the loop (a hush is darker than a roar), which
+     * is the placeholder's stand-in for the low-pass the design asks for. 0 stops the stream.
+     */
+    fun crowd(level: Float, rate: Float = 1f) {
+        handler?.post {
+            if (!loaded) return@post
+            val v = (volume * 0.6f * level.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+            if (v <= 0.01f) { if (crowdStream != 0) { pool.stop(crowdStream); crowdStream = 0 }; return@post }
+            if (crowdStream == 0) crowdStream = pool.play(ids[CROWD_BED], v, v, 0, -1, rate.coerceIn(0.5f, 2f))
+            else { pool.setVolume(crowdStream, v, v); pool.setRate(crowdStream, rate.coerceIn(0.5f, 2f)) }
+        }
+    }
+
+    fun stopCrowd() { handler?.post { if (crowdStream != 0) { pool.stop(crowdStream); crowdStream = 0 } } }
+    private var crowdStream = 0
 
     fun release() {
         handler?.post { runCatching { pool.release() } }

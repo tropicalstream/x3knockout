@@ -4,6 +4,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 
 /**
@@ -12,18 +13,33 @@ import kotlin.math.pow
  * `MotionTracker` measures the body and hands over a single scalar, [Clock.update]'s `motion`
  * (0..1). This class turns that into the only two numbers the rest of the game is allowed to ask
  * for — [timeScale] and [wdt] — and owns everything that legitimately bends them: the action
- * quanta (acting always spends time), the floor (a stopped world is a screenshot), the three
- * forced states (a hop, a docking cell and the settings menu are not negotiable), the world clock
- * [worldT], the 10 Hz `CLK` telemetry line, and the rail's 0.5-crossing flag that the latency test
- * reads (DESIGN.md §13, test A3).
+ * quanta (acting always spends time), the floor (a stopped world is a screenshot), the forced
+ * states (a step, the corner, a punch, his strike, a hit-stop, a fall and the count are not the
+ * body's to spend), the world clock [worldT], the 10 Hz `CLK` telemetry line, and the rail's
+ * 0.5-crossing flag that the latency test reads (DESIGN.md §13).
  *
  * **This file imports nothing from Android, and it must stay that way.** The whole two-clock
  * promise — every hostile timer on world time, every caption and cue on real time (DESIGN.md
- * §1.5) — is a claim about arithmetic, and the only cheap way to keep proving it through twelve
- * levels of churn is a JVM unit test (`ClockTest`). A single `android.util.Log` or `SystemClock`
- * in here costs that test, so the log goes out through [log] and the caller supplies the sink.
+ * §2.9) — is a claim about arithmetic, and the only cheap way to keep proving it through a fight's
+ * worth of churn is a JVM unit test (`ClockTest`). A single `android.util.Log` or `SystemClock` in
+ * here costs that test, so the log goes out through [log] and the caller supplies the sink.
  * (`java.util.Locale` below is JVM, not Android, and is here for a reason of its own — see
  * [clkLine].)
+ *
+ * WHAT CHANGED FOR THE FIGHT (DESIGN.md §2, against the x3discs clock this file was inherited
+ * from — the law itself is untouched):
+ *
+ *  - **[floorOverride]** — the fight state machine writes the floor every frame from the boxer's
+ *    own state (0.35 while he circles, 0.06 for the hang of a tell, a ramp to 0.60 through the
+ *    fuse, 0.12 while he is open), so the world hangs exactly when there is something to read and
+ *    runs when there is not. [floor] returns the override when it is ≥ 0 and the difficulty (or
+ *    lab) floor otherwise. Everything else in the formula is untouched.
+ *  - **[Verb]** is the fight's: JAB / HOOK / SPECIAL / GUARD / STEP / EMPTY. The punches are FORCED
+ *    states first and pulses second — see [forcePunch] and its tail.
+ *  - **[Forced]** gained PUNCH, STRIKE, HITSTOP, SLOW and COUNT beside STEP (was HOP), CORNER (was
+ *    DOCKING) and MENU. The timed-vs-latched split is kept and grew a third layer: MENU latches
+ *    over everything, HITSTOP is a PAUSE that holds every timer under it (a hit-stop must not
+ *    eat the strike it landed inside), and the rest are one timer at a time.
  *
  * It also owns the KNEE, because the knee is a clock decision and not a sensor one. The measured
  * ruling in MOTION.md is already made — **Set B ships** ([Knee.B]: `W_REF` 1.9, `GAMMA` 1.8), so
@@ -32,18 +48,18 @@ import kotlin.math.pow
  * and [gamma] into `MotionTracker.W_REF` / `MotionTracker.GAMMA` whenever the lab's `KNEE` row
  * moves, because that is the direction that keeps this file pure. **That copy is load-bearing**:
  * [update] takes the mapped scalar and does not re-derive it, so a build that forgets the wire
- * ships Set A's curve while [target] and the `CLK` line's `knee=` both claim Set B, and A2 —
- * the test the design lives or dies on — is measuring the wrong thing without saying so.
+ * ships Set A's curve while [target] and the `CLK` line's `knee=` both claim Set B.
  *
  * There is deliberately **no anti-wiggle patch** in here. A head-shake buys time because it is
  * motion; what stops it being an exploit is the shape of the curve itself (monotonic, saturating)
- * plus a `RELEASE` longer than a half-shake and a throw spread that grows with `m` — DESIGN.md
- * §1.4. Anything that special-cased a reversal would be a second, hidden clock.
+ * plus a `RELEASE` longer than a half-shake and a punch that WHIFFS past his head when thrown
+ * at `m > 0.6` (DESIGN.md §4.2). Anything that special-cased a reversal would be a second, hidden
+ * clock.
  */
 class Clock {
 
     companion object {
-        // ---------------------------------------------------------------- the map (DESIGN.md §1.1)
+        // ---------------------------------------------------------------- the map (MOTION.md)
         /** Angular speed below which the clock stays at its floor, rad/s: rest noise and breathing buy nothing. */
         const val DEAD_W = 0.08f
         /** Linear acceleration dead band, m/s². */
@@ -54,7 +70,7 @@ class Clock {
         const val ATTACK = 0.04f
         /**
          * Longer than a half head-shake (~100 ms), which is what makes the anti-wiggle rule work:
-         * a reversal never hands back a free frozen frame (DESIGN.md §1.4, test A4).
+         * a reversal never hands back a free frozen frame.
          */
         const val RELEASE = 0.16f
 
@@ -65,7 +81,12 @@ class Clock {
         const val W_REF_B = 1.9f
         const val GAMMA_B = 1.8f
 
-        // ---------------------------------------------------------------- the floor (DESIGN.md §1.2)
+        // ---------------------------------------------------------------- the base floor
+        /**
+         * The floor when nobody has overridden it — the title, the menus, a fight state that has
+         * not written [floorOverride] this frame. In a fight the boxer's state owns the floor
+         * (DESIGN.md §2.2); these are what x3discs shipped and what the lab ladder A/Bs.
+         */
         const val FLOOR_EASY = 0.03f
         const val FLOOR_NORMAL = 0.05f
         const val FLOOR_HARD = 0.08f
@@ -74,28 +95,54 @@ class Clock {
         /** [labFloor] set to this means "follow difficulty", which is what a shipped build does. */
         const val LAB_FLOOR_OFF = -1
 
-        // ---------------------------------------------------------------- the quanta (DESIGN.md §1.3)
+        // ---------------------------------------------------------------- the quanta (DESIGN.md §2.3)
         // The honest answer to "give me a button that advances time": you can always make the
         // world move by ACTING, never by waiting. Each verb adds its pulse to `act`, which decays
         // on REAL time — so the cost is paid whether or not the player then stands still.
-        const val PULSE_THROW = 1.0f
-        const val TAU_THROW = 0.25f
-        const val PULSE_DEFLECT = 0.5f
-        const val TAU_DEFLECT = 0.20f
-        const val PULSE_CATCH = 0.3f
-        const val TAU_CATCH = 0.15f
-        const val PULSE_RECALL = 0.5f
-        const val TAU_RECALL = 0.20f
-        /** The trigger-on-empty rule: a tap with an empty rack is still an act, and still costs. */
+        //
+        // A PUNCH is a forced window FIRST (rate 1.0 for its active + recovery frames) and a
+        // pulse SECOND, applied when that window closes naturally — see [forcePunch]. The pulse
+        // alone was measured to be unfair: on the owner's recorded run a delicate cut-tap drove the
+        // accelerometer's `motion` to 0.29 and a slap to 0.96 for ≈ 0.8 s. A forced window makes a
+        // delicate tap and a slap cost the same, which is what fairness needs.
+        const val PULSE_JAB = 1.0f
+        const val TAU_JAB = 0.20f
+        const val PULSE_HOOK = 1.0f
+        const val TAU_HOOK = 0.25f
+        /** The guard raise or pop — the deflector's old numbers, ≈ 0.10 s of world. */
+        const val PULSE_GUARD = 0.5f
+        const val TAU_GUARD = 0.20f
+        /** The trigger-on-empty rule: a click off the arena's verbs is still an act, ≈ 0.03 s. */
         const val PULSE_EMPTY = 0.2f
         const val TAU_EMPTY = 0.15f
 
-        // ---------------------------------------------------------------- forced states
-        /** The hop's default duration, seconds; the lab offers 0.28 / 0.35 / 0.45 / 0.60 (test B4). */
-        const val HOP_T_DEFAULT = 0.35f
-        val HOP_T_CHOICES = floatArrayOf(0.28f, 0.35f, 0.45f, 0.60f)
-        /** The cell's slide between rounds, seconds: when the world moves, time moves. */
-        const val DOCK_T = 2.2f
+        // ---------------------------------------------------------------- forced states (DESIGN.md §2.4)
+        /** The step's slide, seconds, at rate 1.0; the lab's ladder is [STEP_T_CHOICES] (was HOP T). */
+        const val STEP_T_DEFAULT = 0.35f
+        val STEP_T_CHOICES = floatArrayOf(0.28f, 0.35f, 0.45f, 0.60f)
+        /** The ropes slide you to your corner between rounds: when the world moves, time moves. */
+        const val CORNER_T = 2.2f
+        /** A player's punch, active + recovery, real seconds: the jab, the cross, the special. */
+        const val PUNCH_JAB_T = 0.28f
+        const val PUNCH_HOOK_T = 0.36f
+        const val PUNCH_SPECIAL_T = 0.60f
+        /** A whiff (air, or his closed guard) EXTENDS the forced window by this: the mash tax. */
+        const val WHIFF_EXTEND_T = 0.15f
+        /** His glove in flight, real seconds — the pecks, then the hooks and the uppercut. */
+        const val STRIKE_PECK_T = 0.25f
+        const val STRIKE_HOOK_T = 0.33f
+        /** The 1984 impact frame, milliseconds of real time with BOTH clocks stopped (§2.5). */
+        const val HITSTOP_JAB_MS = 70
+        const val HITSTOP_HOOK_MS = 110
+        const val HITSTOP_COUNTER_MS = 130
+        const val HITSTOP_SPECIAL_MS = 200
+        /** His fall: a quarter speed for 1.1 s; the KO: a tenth for 2.0 s. */
+        const val SLOW_KNOCKDOWN_RATE = 0.22f
+        const val SLOW_KNOCKDOWN_T = 1.1f
+        const val SLOW_KO_RATE = 0.10f
+        const val SLOW_KO_T = 2.0f
+        /** The referee's ten, real seconds; the fight clears the state at the rise. */
+        const val COUNT_MAX_T = 10f
 
         // ---------------------------------------------------------------- telemetry
         /** The `CLK` line's period, seconds (10 Hz). */
@@ -104,7 +151,7 @@ class Clock {
         const val HALF_MARK = 0.5f
         /** How long that flash lasts, seconds of REAL time — it is a HUD event, not a world one. */
         const val HALF_FLASH_T = 0.35f
-        /** `STILL` appears beside the rail after this long under [STILL_RATE] (DESIGN.md §9). */
+        /** `STILL` appears beside the rail after this long under [STILL_RATE] (DESIGN.md §2.8). */
         const val STILL_T = 1.0f
         const val STILL_RATE = 0.10f
 
@@ -112,10 +159,9 @@ class Clock {
          * The frame clamp, seconds. `GLRenderer` already clamps to exactly this before it calls
          * us, so on the glasses this line never fires; it is here because [worldT] is the one
          * number in the game with no way back. A single unclamped frame — a resumed activity, a
-         * GC pause, a debug harness driving the clock by hand — would hand every hostile disc a
-         * teleport, and a single non-finite one would leave `worldT` NaN for the rest of the run,
-         * silently killing PAR, the par bonus and every comparison that reads them (NaN fails
-         * every comparison, so nothing would ever trip).
+         * GC pause, a debug harness driving the clock by hand — would hand his glove a teleport,
+         * and a single non-finite one would leave `worldT` NaN for the rest of the run, silently
+         * killing the round clock and every comparison that reads it.
          */
         private const val MAX_DT = 0.05f
     }
@@ -123,15 +169,17 @@ class Clock {
     /** Which pair of knee constants the body is being charged at. B ships; A stays for the lab row. */
     enum class Knee { A, B }
 
-    /** Everything that spends a quantum. One meaning per pad verb per state (DESIGN.md §10). */
-    enum class Verb { THROW, DEFLECT, CATCH, RECALL, EMPTY }
+    /** Everything that spends a quantum. One meaning per pad verb per state (DESIGN.md §1.7). */
+    enum class Verb { JAB, HOOK, SPECIAL, GUARD, STEP, EMPTY }
 
     /**
-     * The three states in which the clock is NOT the body's to spend. They are not exceptions to
-     * the law so much as its other half: a hop and a docking cell move the world bodily, so the
-     * world's own time runs; the menu is outside the fiction, so nothing runs at all.
+     * The states in which the clock is NOT the body's to spend (DESIGN.md §2.4). They are not
+     * exceptions to the law so much as its other half: a step and the corner move the world
+     * bodily; a punch is a swing that takes time; his strike is in flight and not negotiable; a
+     * hit-stop is the impact frame; the fall is a story beat you watch; the count belongs to the
+     * referee, who is not inside your fight; and the menu is outside the fiction.
      */
-    enum class Forced { NONE, HOP, DOCKING, MENU }
+    enum class Forced { NONE, STEP, CORNER, MENU, PUNCH, STRIKE, HITSTOP, SLOW, COUNT }
 
     // ------------------------------------------------------------------ configuration
     /** Set B by measurement (MOTION.md). The lab's `KNEE` row is the only thing that should move this. */
@@ -143,13 +191,25 @@ class Clock {
     var difficulty = 1
     /** An index into [LAB_FLOORS], or [LAB_FLOOR_OFF] to follow [difficulty]. Lab builds only. */
     var labFloor = LAB_FLOOR_OFF
-    /** How long a hop forces rate 1.0 — set from the lab's `HOP T` row. */
-    var hopT = HOP_T_DEFAULT
+    /** How long a step forces rate 1.0 — the lab's ladder, [STEP_T_CHOICES]. */
+    var stepT = STEP_T_DEFAULT
 
-    /** The floor the world creeps at when the player is perfectly still. */
-    val floor: Float
+    /**
+     * THE FLOOR IS THE BOXER'S STATE (DESIGN.md §2.2). The fight writes this every frame; a
+     * negative value means "nobody is overriding: use the difficulty or lab floor". It is a
+     * plain field and not a setter with side effects because it is written sixty times a second
+     * by whoever owns the fight, and the only thing it may do is be read by [floor].
+     */
+    var floorOverride = -1f
+
+    /** The difficulty or lab floor — what [floor] falls back to with no override in force. */
+    val baseFloor: Float
         get() = if (labFloor in LAB_FLOORS.indices) LAB_FLOORS[labFloor]
         else when (difficulty) { 0 -> FLOOR_EASY; 2 -> FLOOR_HARD; else -> FLOOR_NORMAL }
+
+    /** The floor the world creeps at when the player is perfectly still, override first. */
+    val floor: Float
+        get() = if (floorOverride >= 0f) floorOverride.coerceIn(0f, 1f) else baseFloor
 
     // ------------------------------------------------------------------ this frame
     /** How fast the world ran this frame, 0..1. The left rail IS this number. */
@@ -158,9 +218,9 @@ class Clock {
     var wdt = 0f; private set
     /** The real seconds of the last frame, clamped by the renderer — captions and cues run on this. */
     var dt = 0f; private set
-    /** The WORLD CLOCK on the plate: seconds the world has been allowed to have. PAR is measured on it. */
+    /** The WORLD CLOCK on the plate: seconds the world has been allowed to have. The round clock is on it. */
     var worldT = 0f; private set
-    /** Real seconds since the round began — shown small and unscored, for the owner's time trials. */
+    /** Real seconds since the round began — the 3:00 cap and the time bonus read this. */
     var realT = 0f; private set
     /** The smoothed body scalar this frame, as handed in — kept for the `CLK` line and the lab plate. */
     var motion = 0f; private set
@@ -172,13 +232,25 @@ class Clock {
     /** Which forced state (if any) overrode the body this frame. */
     var forced = Forced.NONE; private set
     /**
-     * The timed half of [forced] — [Forced.HOP] or [Forced.DOCKING]. It is kept apart from the
-     * public field because the menu is a LATCH and these two are TIMERS: opening the settings
-     * mid-hop must not cancel the hop, and the hop expiring must not close the menu.
+     * The timed half of [forced] — STEP, CORNER, PUNCH, STRIKE, SLOW or COUNT, one at a time. It
+     * is kept apart from the public field because the menu is a LATCH and these are TIMERS:
+     * opening the settings mid-strike must not cancel the strike, and the strike expiring must
+     * not close the menu.
      */
     private var timed = Forced.NONE
     private var forcedT = 0f
-    /** True while the settings menu is up: rate 0, no quantum, and the Protocol is paused. */
+    /** The rate a SLOW state runs at — 0.22 for a knockdown, 0.10 for the KO. */
+    private var slowRate = SLOW_KNOCKDOWN_RATE
+    /**
+     * THE HIT-STOP IS A PAUSE, NOT A TIMER IN THE SLOT. It sits between the menu latch and the
+     * timed state and HOLDS whatever timer is running, for the same reason the menu does: a
+     * punch that lands inside his strike must not eat the strike, and a special's 200 ms must
+     * not shorten the recover it opened. The render loop never stops — only the clocks (§2.5).
+     */
+    private var hitstopT = 0f
+    /** The pulse a PUNCH window pays out when it closes naturally — see [forcePunch]. */
+    private var tail: Verb? = null
+    /** True while the settings menu is up: rate 0, no quantum, and the fight is paused. */
     var menuOpen = false
 
     /** True for exactly the frame in which [timeScale] crossed [HALF_MARK] in either direction. */
@@ -186,20 +258,20 @@ class Clock {
     /** 1 → 0 over [HALF_FLASH_T] real seconds after that crossing: the rail tick's brightness. */
     var halfFlash = 0f; private set
     /**
-     * How long the rate has been under [STILL_RATE]; past [STILL_T] the rail says `STILL`.
+     * How long the rate has been under [STILL_RATE] with NO forced state in force; past
+     * [STILL_T] the rail says `STILL` and the fight's stall pressure keys off it (DESIGN.md §2.8:
+     * still while he is IDLE for 3 real seconds → the boo, the shorter tell, the half-peck).
      *
-     * It keeps counting well past that, because it is also the trigger every stillness beat in
-     * STORY.md is keyed on — `l1_stomp` at 4 real s, `hero_take_time` at 15, `still_waiting` at
-     * 20, the Level 2 mercy schedule at 3 / 6 / 9. Those are all REAL seconds, which is why this
-     * accumulates [dt] and not [wdt]; and it is why the menu must neither inflate nor reset it
-     * (see [update]) — a minute spent in the settings would otherwise make the machine accuse the
-     * player of defiance the instant the panel closed.
+     * REAL seconds, which is why this accumulates [dt] and not [wdt]; and it is HELD — neither
+     * inflated nor reset — under the menu and under every forced state, because a hit-stop, a
+     * count or a fall at rate 0 is not the player standing still, and a minute in the settings
+     * must not make the crowd boo the instant the panel closes.
      */
     var stillT = 0f; private set
     val still: Boolean get() = stillT >= STILL_T
 
     /** The τ the current [act] charge is decaying on — set by the most recent verb (see [pulse]). */
-    private var actTau = TAU_THROW
+    private var actTau = TAU_JAB
     private var logT = 0f
 
     /**
@@ -214,52 +286,113 @@ class Clock {
      * keeping its own envelope: two verbs inside a quarter of a second are one action as far as
      * the body is concerned, and a single scalar is the thing the rail can honestly draw.
      *
-     * Charges are capped at 1.0 rather than summed, so a rack emptied in three taps cannot bank a
-     * second of world time to be spent standing still afterwards. A throw's 1.0 at τ 0.25 is
-     * worth ≈ 0.24 s of world time above the floor (DESIGN.md §1.3's table is the integral of the
-     * decay, not a separate number); the empty tap's 0.2 at τ 0.15 is worth ≈ 0.03 s, which is
-     * enough for the player to feel that a wasted tap was still a real one.
+     * Charges are capped at 1.0 rather than summed, so a flurry cannot bank a second of world
+     * time to be spent standing still afterwards. A jab's 1.0 at τ 0.20 is worth ≈ 0.20 s of
+     * world time above the floor (DESIGN.md §2.3's table is the integral of the decay, not a
+     * separate number); the empty tap's 0.2 at τ 0.15 is worth ≈ 0.03 s, enough for the player
+     * to feel that a wasted tap was still a real one.
+     *
+     * SPECIAL and STEP pulse NOTHING: both are forced windows for their whole length (0.60 s and
+     * [stepT]) and end where they end — the special in a hit-stop, the step on the landing.
      */
     fun pulse(verb: Verb) {
-        // DESIGN.md §10: the double-tap into settings, and everything done in there, costs
+        // DESIGN.md §1.7: the double-tap into settings, and everything done in there, costs
         // nothing. The menu is the one place the game takes input without charging for it.
         if (menuOpen) return
         val (p, tau) = when (verb) {
-            Verb.THROW -> PULSE_THROW to TAU_THROW
-            Verb.DEFLECT -> PULSE_DEFLECT to TAU_DEFLECT
-            Verb.CATCH -> PULSE_CATCH to TAU_CATCH
-            Verb.RECALL -> PULSE_RECALL to TAU_RECALL
+            Verb.JAB -> PULSE_JAB to TAU_JAB
+            Verb.HOOK -> PULSE_HOOK to TAU_HOOK
+            Verb.GUARD -> PULSE_GUARD to TAU_GUARD
             Verb.EMPTY -> PULSE_EMPTY to TAU_EMPTY
+            Verb.SPECIAL, Verb.STEP -> return
         }
         act = (act + p).coerceAtMost(1f)
         actTau = tau
     }
 
-    /** Rate 1.0 for the length of a hop: the biggest honest cost in the game, and the reason it is safe. */
-    fun forceHop(seconds: Float = hopT) { timed = Forced.HOP; forcedT = seconds; syncForced() }
+    /** Rate 1.0 for the length of a step: the world moved you; it moves too (was `forceHop`). */
+    fun forceStep(seconds: Float = stepT) { timed = Forced.STEP; forcedT = seconds; tail = null; syncForced() }
 
-    /** Rate 1.0 while the cell slides to meet the next configuration: when the world moves, time moves. */
-    fun forceDock(seconds: Float = DOCK_T) { timed = Forced.DOCKING; forcedT = seconds; syncForced() }
+    /** Rate 1.0 while the ropes slide you to your corner: when the world moves, time moves (was `forceDock`). */
+    fun forceCorner(seconds: Float = CORNER_T) { timed = Forced.CORNER; forcedT = seconds; tail = null; syncForced() }
 
     /**
-     * Drop any forced state early — a hop cut short by a death, a dock skipped by a restart.
-     * It cannot drop [Forced.MENU]: the menu is closed by clearing [menuOpen], and a caller that
-     * could cancel it from here would be able to leave the world running under an open panel.
+     * YOU SWUNG; THE SWING TAKES TIME. Rate 1.0 for [seconds] — [PUNCH_JAB_T], [PUNCH_HOOK_T] or
+     * [PUNCH_SPECIAL_T] — and then, if the window closes on its own, [tail] is pulsed so the world
+     * keeps running for the punch's follow-through (JAB → τ 0.20, HOOK → τ 0.25). The fight
+     * shapes the window afterwards: a WHIFF [extendForced]s it by [WHIFF_EXTEND_T] (the mash
+     * tax), a LANDED punch [cutForced]s it to the active frames and drops the tail (landing is
+     * cheaper than missing), and a COUNTER inside the perfect window never calls this at all —
+     * the world stays at the floor while you throw it (DESIGN.md §2.6).
      */
-    fun clearForced() { timed = Forced.NONE; forcedT = 0f; syncForced() }
+    fun forcePunch(seconds: Float, tail: Verb? = null) { timed = Forced.PUNCH; forcedT = seconds; this.tail = tail; syncForced() }
 
-    /** A new round: the world clock, the par timer and the still counter all start again. */
+    /**
+     * Rate 1.0 for his strike — DESIGN.md §2.4's first draft. NO LONGER CALLED BY THE FIGHT: the
+     * owner's ruling (BOXER.md's header) has every punch travel on world time, his included, so
+     * his glove in flight runs under the boxer's hang-then-fuse floor (`Boxer.floorNow`) instead.
+     * The state and its entry point stay — `ClockTest` pins the timed-state mechanics on it and
+     * the lab may want a forced strike to A/B the ruling on-head — but a `forced=STRIKE` in a
+     * `CLK` line today means somebody put it back.
+     */
+    fun forceStrike(seconds: Float) { timed = Forced.STRIKE; forcedT = seconds; tail = null; syncForced() }
+
+    /** The fall is a story beat you watch, not a read: [rate] for [seconds] (0.22 / 1.1 s, or the KO's 0.10 / 2.0). */
+    fun forceSlow(rate: Float, seconds: Float) { timed = Forced.SLOW; forcedT = seconds; slowRate = rate.coerceIn(0f, 1f); tail = null; syncForced() }
+
+    /** The referee is outside the bubble: rate 0 until the rise calls [clearForced], or ten seconds. */
+    fun forceCount(seconds: Float = COUNT_MAX_T) { timed = Forced.COUNT; forcedT = seconds; tail = null; syncForced() }
+
+    /**
+     * The impact frame: both clocks stop for [ms] of real time and every timer under it is held.
+     * The LONGER stop wins and stops are never summed — a 1-2 that lands twice inside 70 ms is
+     * one impact, not a 140 ms freeze.
+     */
+    fun forceHitstop(ms: Int) { hitstopT = max(hitstopT, ms / 1000f); syncForced() }
+
+    /** Lengthen the running timer — the whiff's [WHIFF_EXTEND_T]. No timer, no effect. */
+    fun extendForced(seconds: Float) { if (timed != Forced.NONE) forcedT += seconds }
+
+    /**
+     * Shorten the running timer to at most [seconds] from now and drop its tail — a landed punch
+     * is cut to its active frames and its recovery is cancellable (DESIGN.md §2.3).
+     */
+    fun cutForced(seconds: Float) {
+        if (timed == Forced.NONE) return
+        forcedT = min(forcedT, seconds); tail = null
+        // A window cut to nothing is over NOW, not on the next frame: a timed state with a zero
+        // timer would otherwise sit in the slot forever, because the countdown below only runs
+        // while there is something left to count.
+        if (forcedT <= 0f) { timed = Forced.NONE; forcedT = 0f; syncForced() }
+    }
+
+    /**
+     * Drop any forced state early — a step cut short by a knockdown, the count ended by the rise,
+     * a hit-stop abandoned by a restart. It cannot drop [Forced.MENU]: the menu is closed by
+     * clearing [menuOpen], and a caller that could cancel it from here would be able to leave
+     * the world running under an open panel.
+     */
+    fun clearForced() { timed = Forced.NONE; forcedT = 0f; tail = null; hitstopT = 0f; syncForced() }
+
+    /** Real seconds left on the timed state (0 when none) — the lab plate's `FORCED` row and the tests. */
+    val forcedLeft: Float get() = if (timed == Forced.NONE) 0f else forcedT.coerceAtLeast(0f)
+    /** Real seconds left on the hit-stop pause (0 when none). */
+    val hitstopLeft: Float get() = hitstopT.coerceAtLeast(0f)
+    /** The timed state itself, MENU and HITSTOP seen through — what will resume when they lift. */
+    val timedState: Forced get() = timed
+
+    /** A new round: the world clock, the real clock, the still counter and the override all start again. */
     fun resetRound() {
         worldT = 0f; realT = 0f; act = 0f; m = 0f; motion = 0f; stillT = 0f
-        crossedHalf = false; halfFlash = 0f; logT = 0f; clearForced()
-        // Start the rail where a standing player starts, not at the 1.0 a docking cell just left
-        // it at: otherwise the first frame of the round reads as a crossing of 0.5 and the
-        // latency tick flashes at a player who has not moved.
+        crossedHalf = false; halfFlash = 0f; logT = 0f; floorOverride = -1f; clearForced()
+        // Start the rail where a standing player starts, not at the 1.0 the corner just left it
+        // at: otherwise the first frame of the round reads as a crossing of 0.5 and the latency
+        // tick flashes at a player who has not moved.
         timeScale = floor; wdt = 0f
     }
 
-    /** The menu latches over whichever timer is running; nothing else may write [forced]. */
-    private fun syncForced() { forced = if (menuOpen) Forced.MENU else timed }
+    /** MENU latches over HITSTOP, which pauses over whichever timer is running; nothing else may write [forced]. */
+    private fun syncForced() { forced = if (menuOpen) Forced.MENU else if (hitstopT > 0f) Forced.HITSTOP else timed }
 
     // ------------------------------------------------------------------ the frame
     /**
@@ -288,21 +421,36 @@ class Clock {
         }
         m = (mo + act).coerceIn(0f, 1f)
 
-        // The forced timers run on REAL time. A hop is 0.35 s of the player's own life, and a hop
-        // counted on world time could never end anyway — it is the thing holding the rate up, so
-        // it would be counting its own output. They are held while the menu is open for the same
-        // reason the world is: a hop interrupted by the settings panel resumes where it left off.
-        if (!menuOpen && forcedT > 0f) {
-            forcedT -= d
-            if (forcedT <= 0f) { timed = Forced.NONE; forcedT = 0f }
+        // THE FORCED TIMERS RUN ON REAL TIME. A punch is 0.28 s of the player's own life, and a
+        // punch counted on world time could never end anyway — it is the thing holding the rate
+        // up, so it would be counting its own output. They are held while the menu is open and
+        // while a hit-stop is in force, for the same reason the world is: a strike interrupted by
+        // the settings panel, or by the punch that landed inside it, resumes where it left off.
+        if (!menuOpen) {
+            if (hitstopT > 0f) {
+                hitstopT -= d
+                if (hitstopT <= 0f) hitstopT = 0f
+            } else if (timed != Forced.NONE) {
+                forcedT -= d
+                if (forcedT <= 0f) {
+                    val t = tail
+                    timed = Forced.NONE; forcedT = 0f; tail = null
+                    // the follow-through: paid only when the window ran its course (a landed
+                    // punch was cut and dropped its tail; a whiff kept it)
+                    if (t != null) pulse(t)
+                }
+            }
         }
         syncForced()
 
         val prev = timeScale
         timeScale = when (forced) {
-            Forced.MENU -> 0f                                // outside the fiction; nothing runs
-            Forced.HOP, Forced.DOCKING -> 1f                 // the world moved you; it moves too
-            Forced.NONE -> floor + (1f - floor) * m          // the law (DESIGN.md §1.1)
+            Forced.MENU -> 0f                                          // outside the fiction; nothing runs
+            Forced.HITSTOP -> 0f                                       // the impact frame
+            Forced.COUNT -> 0f                                         // the referee is outside the bubble
+            Forced.STEP, Forced.CORNER, Forced.PUNCH, Forced.STRIKE -> 1f   // not the body's to spend
+            Forced.SLOW -> slowRate                                    // the fall, watched
+            Forced.NONE -> floor + (1f - floor) * m                    // the law
         }
         wdt = d * timeScale
         worldT += wdt
@@ -312,7 +460,7 @@ class Clock {
         if (crossedHalf) halfFlash = 1f
         else if (halfFlash > 0f) halfFlash = (halfFlash - d / HALF_FLASH_T).coerceAtLeast(0f)
 
-        if (!menuOpen) stillT = if (timeScale < STILL_RATE) stillT + d else 0f
+        if (!menuOpen && forced == Forced.NONE) stillT = if (timeScale < STILL_RATE) stillT + d else 0f
 
         // 10 Hz, carrying the remainder rather than dropping it. Zeroing the accumulator instead
         // would throw away the overshoot — half a frame on average — and the line would arrive
@@ -328,8 +476,8 @@ class Clock {
 
     /**
      * The 10 Hz telemetry line of DESIGN.md §13 — the review process reads this, so keep the keys.
-     * `knee=` is BUILD_PLAN §1.1's requirement (the lab row must be visible in the log that A2 is
-     * judged from) and `forced=` is how B4 tells a hop's 0.35 s from a body that simply moved.
+     * `floor=` shows the override in force and `forced=` carries the new names (PUNCH / STRIKE /
+     * HITSTOP / SLOW / COUNT / STEP / CORNER / MENU) so the tooling keeps parsing.
      *
      * Formatted in [Locale.US] on purpose: the default locale would write `rate=0,53` on a
      * comma-decimal device and every parser in `tools/` would read the line as garbage — a
