@@ -1446,14 +1446,24 @@ class Fight(private val store: SettingsStore, private val host: GameHost) : Boxe
      * on the player's clock, and a still player watching the announcer introduce him would
      * otherwise watch a frozen taunt.
      */
+    /** The safety floor once a round has run three REAL minutes — see [floorFor]. */
+    private val REAL_CAP_FLOOR = 0.35f
+
     private fun floorFor(): Float = when {
         debugFloor >= 0f -> debugFloor
         state == State.FIGHT -> {
-            val his = boxer.floorNow(Boxer.FLOOR_DEEP[store.difficulty.coerceIn(0, 2)])
-            val f = if (his < 0f) Boxer.FLOOR_IDLE else his
-            if (realCapped) max(f, Boxer.FLOOR_IDLE) else f
+            // ONE FLOOR (DESIGN.md §0.1). The fallback for a knockdown and the real-time cap both
+            // used to reach for FLOOR_IDLE = 0.35 — the number that made the mechanic invisible —
+            // so they take the same low floor as everything else now. The `realCapped` case is the
+            // one honest exception and it is a SAFETY net, not a difficulty dial: after three real
+            // minutes in one round the fight has stopped being a fight, and it is better to let it
+            // run out than to leave a wearer standing motionless in front of a frozen man forever.
+            val deep = Clock.FLOOR_STILL
+            val his = boxer.floorNow(deep)
+            val f = if (his < 0f) deep else his
+            if (realCapped) max(f, REAL_CAP_FLOOR) else f
         }
-        state == State.KNOCKDOWN_COUNT -> Boxer.FLOOR_IDLE
+        state == State.KNOCKDOWN_COUNT -> Clock.FLOOR_STILL
         else -> 1f
     }
 

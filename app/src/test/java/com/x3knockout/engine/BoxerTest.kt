@@ -101,10 +101,10 @@ class BoxerTest {
         run(b, body, 0.5f, wdt = 0f)
         assertEquals("the hang is gone", 0f, b.hangLeft, 1e-6f)
         assertTrue("the fuse is burning", b.fuseLeft in 0.01f..Boxer.FUSE_T)
-        assertTrue("the floor ramps from the hang toward the fuse's top", b.floorNow(0.06f) > 0.06f && b.floorNow(0.06f) < Boxer.FLOOR_FUSE_TOP)
+        assertEquals("ONE FLOOR: a burning fuse does not raise it", 0.06f, b.floorNow(0.06f), 1e-6f)
         run(b, body, Boxer.FUSE_T + 0.1f, wdt = 0f)
         assertTrue("the fuse burned", b.fuseBurned); assertEquals(1, rec.fuseBurned)
-        assertEquals("the floor holds at the fuse's top", Boxer.FLOOR_FUSE_TOP, b.floorNow(0.06f), 1e-6f)
+        assertEquals("...and a burned fuse does not raise it either", 0.06f, b.floorNow(0.06f), 1e-6f)
         assertEquals("...and still nothing was thrown: the world never moved", Boxer.Phase.TELL, b.phase)
         assertEquals(frozenAt, b.tellFrac, 1e-6f)
         // your move throws his punch
@@ -114,7 +114,7 @@ class BoxerTest {
         assertEquals("centred and level: the jab lands", StrikeResult.HIT, rec.strikes[0].third)
         assertEquals("...for no damage in a drill", 0, rec.dmgs[0])
         assertEquals("he is open in his recover", Boxer.Phase.RECOVER, b.phase)
-        assertEquals(Boxer.FLOOR_OPEN, b.floorNow(0.06f), 1e-6f)
+        assertEquals("his recover runs on the same one floor", 0.06f, b.floorNow(0.06f), 1e-6f)
     }
 
     // ------------------------------------------------------------------ the collider
@@ -322,7 +322,7 @@ class BoxerTest {
         run(b, body, 10f)
         assertTrue(rec.tells.isEmpty()); assertTrue(rec.phrases.isEmpty())
         assertEquals(Boxer.Phase.IDLE, b.phase)
-        assertEquals(Boxer.FLOOR_IDLE, b.floorNow(0.06f), 1e-6f)
+        assertEquals("one floor, in the attract too", 0.06f, b.floorNow(0.06f), 1e-6f)
         b.taunt(); assertEquals(Boxer.Phase.TAUNT, b.phase); assertTrue(b.tongue)
         b.win(); assertEquals("standing, the card is his win", Boxer.Phase.WIN, b.phase)
         assertNotNull(b.verifyLine(body, 0.35f))

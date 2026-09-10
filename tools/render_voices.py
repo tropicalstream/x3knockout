@@ -36,24 +36,42 @@ PARANOIDS = os.path.expanduser("~/Projects/X3Paranoids/app/src/main/assets")  # 
 API = "https://api.fish.audio/v1/tts"
 FREE_MODEL = "s2.1-pro-free"
 
-# THE FIVE VOICES OF A BOXING CABINET, and the thing that must not drift is the SEPARATION: they
-# are mixed on one bus and the player has to know instantly who is talking while being punched.
-#   ANNOUNCER  the house PA: a big slow room, low and gravelled
-#   REFEREE    in the ring with you, no microphone: one short slap, nasal, urgent
-#   CORNER     thirty centimetres from your ear between rounds: no room at all, full band
-#   BOXER      the man in front of you, 2.6 m away, behind a gumshield: one tiny slap, muffled
-#   CROWD      six voices detuned and smeared, no consonants left
-ANNOUNCER_CHAIN = ("highpass=f=200,lowpass=f=3200,aecho=0.8:0.9:180|320:0.4|0.25,"
-                   "acompressor=threshold=-16dB:ratio=3,volume=2.0,alimiter=limit=0.95")
-REFEREE_CHAIN = ("highpass=f=320,lowpass=f=3600,aecho=0.9:0.25:42:0.18,"
-                 "acompressor=threshold=-14dB:ratio=4,volume=2.1,alimiter=limit=0.95")
-CORNER_CHAIN = ("highpass=f=110,lowpass=f=7000,acompressor=threshold=-18dB:ratio=3.5:attack=4,"
-                "loudnorm=I=-16:TP=-1.5")
-BOXER_CHAIN = ("highpass=f=260,lowpass=f=2600,aecho=0.92:0.2:18:0.12,volume=1.7,alimiter=limit=0.95")
-VOICES = {"ANNOUNCER": ("Ralph", 165), "REFEREE": ("Fred", 186), "CORNER": ("Reed", 190),
-          "BOXER": ("Ralph", 172), "CROWD": ("Fred", 148)}
+# THE FIVE VOICES OF A BOXING CABINET.
+#
+# THE FIRST CAST WAS WRONG AND THE OWNER WAS RIGHT ABOUT WHY: Ralph, Fred and Reed are the 1980s
+# FORMANT SYNTHS that ship with macOS for nostalgia. They are robots. Boxing is the most emotional
+# sport there is -- a man in a corner shouting at you, a crowd that wants blood, a referee counting
+# over someone's body -- and none of that survives being read by a speak-and-spell.
+#
+# So: real voices, and much LIGHTER processing. The heavy chains were the other half of the
+# problem; band-limiting a voice to a 300-3000 Hz carrier and drowning it in echo makes anything
+# sound like a machine. What is left is the minimum each position actually needs -- a big room for
+# the man on the PA, one short slap for the man standing in the ring, nothing at all for the man
+# with his mouth at your ear.
+#
+#   ANNOUNCER  Rocko, unhurried, in a big room       the showman on the house PA
+#   REFEREE    Daniel, fast and clipped, one slap    in the ring with you, no microphone
+#   CORNER     Grandpa, close, no room at all        an old trainer thirty centimetres from your ear
+#   BOXER      fish.audio -- a real human voice      the man in front of you, and the one that has
+#                                                    to carry contempt, so it is not synthesised at
+#                                                    all; each fighter is the same performance
+#                                                    pitch-shifted, so the Sardine is small and the
+#                                                    Anvil is enormous
+#   CROWD      six DIFFERENT voices summed           a crowd is many people; six copies of one
+#                                                    voice is a chorus, which is what it sounded like
+ANNOUNCER_CHAIN = ("aecho=0.85:0.5:150|260:0.28|0.16,acompressor=threshold=-18dB:ratio=2.5,"
+                   "loudnorm=I=-16:TP=-1.5")
+REFEREE_CHAIN = ("aecho=0.95:0.2:38:0.14,acompressor=threshold=-16dB:ratio=3,loudnorm=I=-15:TP=-1.5")
+CORNER_CHAIN = ("acompressor=threshold=-18dB:ratio=3:attack=4,loudnorm=I=-15:TP=-1.5")
+BOXER_CHAIN = ("aecho=0.96:0.15:16:0.09,loudnorm=I=-16:TP=-1.5")
+VOICES = {"ANNOUNCER": ("Rocko", 158), "REFEREE": ("Daniel", 192), "CORNER": ("Grandpa", 176)}
 CHAINS = {"ANNOUNCER": ANNOUNCER_CHAIN, "REFEREE": REFEREE_CHAIN, "CORNER": CORNER_CHAIN,
           "BOXER": BOXER_CHAIN}
+# A crowd is MANY PEOPLE. Six different voices at slightly different rates, detuned and offset.
+CROWD_VOICES = [("Eddy", 150), ("Sandy", 146), ("Junior", 156), ("Shelley", 144), ("Flo", 152), ("Karen", 148)]
+# THE FIVE MEN, one performance. The fish model is the owner's; a semitone shift is what makes the
+# Sardine a flyweight and the Anvil a heavyweight without five recording sessions.
+BOXER_SHIFT = {"rooster": 2.0, "sardine": 4.5, "anvil": -4.5, "silk": 0.0, "metronome": -2.0}
 SPEAKER_DIR = {"ANNOUNCER": "voice", "REFEREE": "voice", "CORNER": "voice", "CROWD": "voice",
                "BOXER": "voice_hero"}
 SPEAKER_EXT = {"voice": "m4a", "voice_hero": "mp3"}
@@ -72,15 +90,33 @@ def say(text, voice, rate, aiff):
 def render_say(sp, text, out, tmp, lid):
     voice, rate = VOICES[sp]
     aiff = os.path.join(tmp, lid + ".aiff"); say(text, voice, rate, aiff)
-    ext = "mp3" if out.endswith(".mp3") else "m4a"
-    codec = ["-c:a", "libmp3lame", "-b:a", "64k"] if ext == "mp3" else ["-c:a", "aac", "-b:a", "56k"]
-    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", CHAINS[sp], "-ac", "1", "-ar", "22050", *codec, out)
+    sh("ffmpeg", "-y", "-v", "error", "-i", aiff, "-af", CHAINS[sp],
+       "-ac", "1", "-ar", "24000", "-c:a", "aac", "-b:a", "64k", out)
+
+def render_boxer(text, out, tmp, lid, cfg):
+    """The one voice that is not synthesised. Pitch-shifted per fighter (the id's suffix picks it)."""
+    semis = 0.0
+    for k, v in BOXER_SHIFT.items():
+        if lid.endswith("_" + k): semis = v
+    body = json.dumps({"text": text, "reference_id": cfg["HERO_VOICE_MODEL_ID"],
+                       "format": "mp3", "mp3_bitrate": 128}).encode()
+    req = urllib.request.Request(API, data=body, headers={
+        "Authorization": "Bearer " + cfg["FISH_API_KEY"], "Content-Type": "application/json",
+        "model": os.environ.get("FISH_MODEL", FREE_MODEL)})
+    raw = os.path.join(tmp, lid + "_raw.mp3")
+    with urllib.request.urlopen(req, timeout=120) as r:
+        open(raw, "wb").write(r.read())
+    r = 2 ** (semis / 12.0)
+    shift = "" if abs(semis) < 0.01 else f"asetrate=44100*{r:.6f},aresample=44100,atempo={1/r:.6f},"
+    sh("ffmpeg", "-y", "-v", "error", "-i", raw, "-af", shift + BOXER_CHAIN,
+       "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "64k", out)
 
 def render_crowd(text, out, tmp, lid, voices=6):
     """One word, six times, detuned and offset — a crowd is not a voice, it is a spread."""
     parts = []
     for i in range(voices):
-        aiff = os.path.join(tmp, f"{lid}_{i}.aiff"); say(text, "Fred", 146 + (i - 3) * 2, aiff)
+        cv, cr = CROWD_VOICES[i % len(CROWD_VOICES)]
+        aiff = os.path.join(tmp, f"{lid}_{i}.aiff"); say(text, cv, cr, aiff)
         wav = os.path.join(tmp, f"{lid}_{i}.wav")
         cents = (i - 2.5) / 2.5 * 40.0
         ratio = 2 ** (cents / 1200.0)
@@ -161,6 +197,7 @@ def main():
             print(f"  would render {sp:9s} {lid}: {text[:60]}"); continue
         try:
             if sp == "CROWD": render_crowd(text, out, tmp, lid)
+            elif sp == "BOXER": render_boxer(text, out, tmp, lid, cfg)
             else: render_say(sp, text, out, tmp, lid)
             done["rendered"] += 1
             print(f"  {sp:9s} {lid:24s} {dur_ms(out):5d} ms  {text[:48]}")

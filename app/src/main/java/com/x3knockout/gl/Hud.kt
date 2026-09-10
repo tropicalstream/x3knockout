@@ -157,7 +157,9 @@ class Hud(private val out: Sink) {
         val P_MARQUEE = floatArrayOf(320f, 46f); const val SC_MARQUEE = 1.6f
         const val MARQUEE = "READ THE ROOSTER. THEN MOVE."
         val P_SUBTITLE = floatArrayOf(320f, 195f); const val SC_SUBTITLE = 1.8f
-        const val SUBTITLE = "YOUR BODY IS THE CLOCK. YOUR HANDS ARE YOUR GUARD."
+        // The subtitle is gone at the owner's word. A title screen that explains its own mechanic
+        // in a sentence is a title screen that does not trust the mechanic; the marquee and the
+        // control hints already say what to do with your hands.
         val P_WARNING = floatArrayOf(320f, 340f); const val SC_SMALL = 1.3f
         const val WARNING = "STAND UP. STAY IN PLACE. STOP IF UNWELL."
         val P_HINT_1 = floatArrayOf(320f, 362f)
@@ -697,7 +699,6 @@ class Hud(private val out: Sink) {
         color(CYAN, 0.55f); textC(MARQUEE, P_MARQUEE[0], P_MARQUEE[1], SC_MARQUEE)
         val trace = (m.phaseT / TRACE_T).coerceIn(0f, 1f)
         color(MAGENTA, 0.65f + 0.30f * trace); traceC(TITLE, P_TITLE[0], P_TITLE[1], SC_TITLE, trace)
-        color(WHITE, 0.6f); textC(SUBTITLE, P_SUBTITLE[0], P_SUBTITLE[1], SC_SUBTITLE)
         if (!m.headOn) { color(DAMAGE, 0.95f); textC(NO_HEAD, P_COIN[0], P_COIN[1], SC_COIN) }
         else if (sin(m.t * 4f) > -0.2f) { color(WHITE_GOLD, 0.95f); textC("INSERT COIN TO PLAY", P_COIN[0], P_COIN[1], 2.4f) }
         color(VIOLET, 0.6f); textC(WARNING, P_WARNING[0], P_WARNING[1], SC_SMALL)

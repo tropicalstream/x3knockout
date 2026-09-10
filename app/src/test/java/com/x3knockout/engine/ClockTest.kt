@@ -28,7 +28,7 @@ class ClockTest {
     fun theFloorIsTheBoxersState() {
         val c = Clock(); c.difficulty = 1
         c.update(DT, 0f)
-        assertEquals("no override: the difficulty floor", Clock.FLOOR_NORMAL, c.timeScale, 1e-6f)
+        assertEquals("no override: the difficulty floor", Clock.FLOOR_STILL, c.timeScale, 1e-6f)
         c.floorOverride = 0.35f
         c.update(DT, 0f)
         assertEquals("IDLE: he circles at 0.35 while you stand still", 0.35f, c.timeScale, 1e-6f)
@@ -37,7 +37,7 @@ class ClockTest {
         assertEquals("the hang: 0.06 the frame the tell starts", 0.06f, c.timeScale, 1e-6f)
         c.floorOverride = -1f
         c.update(DT, 0f)
-        assertEquals("cleared: back to the difficulty floor", Clock.FLOOR_NORMAL, c.timeScale, 1e-6f)
+        assertEquals("cleared: back to the difficulty floor", Clock.FLOOR_STILL, c.timeScale, 1e-6f)
         c.floorOverride = 0.5f
         c.update(DT, 1f)
         assertEquals("the override is a floor, not a ceiling: a moving body still reaches 1.0", 1f, c.timeScale, 1e-6f)
@@ -171,6 +171,6 @@ class ClockTest {
         c.resetRound()
         c.update(DT, 0f)
         assertEquals(Clock.Forced.NONE, c.forced)
-        assertEquals(Clock.FLOOR_NORMAL, c.timeScale, 1e-6f)
+        assertEquals(Clock.FLOOR_STILL, c.timeScale, 1e-6f)
     }
 }

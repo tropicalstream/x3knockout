@@ -102,6 +102,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
      * at `glLineWidth(min(6, maxLine))` — the one place a width bump is spent, on two frames.
      */
     private val extendBatch = Batch(1200)
+    /** The cel fills: centroid fans under the outlines, GL_TRIANGLES (see [fillPass]). */
+    private val fillBatch = Batch(4000)
     /** The static groups, uploaded once, drawn with the sway uniform (§12.5). */
     private val ringBatch = StaticBatch(2000)
     private val crowdBatch = StaticBatch(4000)
@@ -139,6 +141,17 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     /** The crest's segments, held back from the emitter so each spike can be drooped about its own base. */
     private val crestBuf = FloatArray(CREST_CAP * 7)
     private var crestN = 0
+    /**
+     * THE CEL FILL'S SCRATCH (see [fillPass]) — the placed, tilted, squashed endpoints of the five
+     * fillable parts, kept as they stream past the emitter so the fan can be built once the whole
+     * part is known. Slot order is [FILL_PARTS]; [fillSlot] maps a part index to a slot or −1.
+     */
+    private var fillSlot = IntArray(0)
+    private val fillBuf = Array(FILL_PARTS.size) { FloatArray(FILL_CAP * 6) }
+    private val fillCount = IntArray(FILL_PARTS.size)
+    private val fillTint = Array(FILL_PARTS.size) { FloatArray(4) }
+    /** [emitSeg] leaves its transformed endpoints here so the fill sees the same geometry the outline did. */
+    private val segOut = FloatArray(6)
 
     // the renderer's own real-time state: edges on the fight's fields, ramps, the crowd
     private var flashRamp = 0f; private var prevFlashGlove: Hand? = null
@@ -203,7 +216,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val range = FloatArray(2); GLES30.glGetFloatv(GLES30.GL_ALIASED_LINE_WIDTH_RANGE, range, 0)
         maxLine = max(1f, range[1])
         lastNanos = 0L
-        for (b in arrayOf(lines, pts, hudBatch, extendBatch)) b.contextLost()
+        for (b in arrayOf(lines, pts, hudBatch, extendBatch, fillBatch)) b.contextLost()
         for (b in arrayOf(ringBatch, crowdBatch)) b.contextLost()
         loadFighterStrips(fight.fighter.asset)
         loadedAsset = fight.fighter.asset
@@ -258,7 +271,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val vw = if (sbs) width / 2 else width
         val aspect = vw.toFloat() / height.toFloat()
 
-        lines.reset(); pts.reset(); hudBatch.reset(); extendBatch.reset()
+        lines.reset(); pts.reset(); hudBatch.reset(); extendBatch.reset(); fillBatch.reset()
         setupCamera(aspect, dt)
         buildScene(dt)
         fillModel(dt, headOn)
@@ -310,6 +323,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             GLES30.glLineWidth(wide); GLES30.glUniform1f(uAlpha, 0.30f * ringGlow); ringBatch.draw()
             GLES30.glLineWidth(core); GLES30.glUniform1f(uAlpha, ringGlow); ringBatch.draw()
             GLES30.glUniform4f(uSway, 0f, 0f, 0f, 0f)
+            // THE FILLS FIRST — colour under the line, the way a comic is inked over flats. The blend
+            // is additive and commutative, so this is not a depth order, it is a reading order: the
+            // outline is the last thing written and the brightest thing on the glass either way.
+            GLES30.glUniform1f(uAlpha, 1f); fillBatch.draw(GLES30.GL_TRIANGLES)
             GLES30.glLineWidth(wide); GLES30.glUniform1f(uAlpha, 0.30f); lines.draw(GLES30.GL_LINES)
             GLES30.glLineWidth(core); GLES30.glUniform1f(uAlpha, 1f); lines.draw(GLES30.GL_LINES)
             if (extendBatch.count > 0) {
@@ -577,6 +594,8 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
                 nm == "sweat" || nm.startsWith("spiral") || nm == "teeth" || nm == "tongue"
             isBlockHatch[i] = nm.startsWith("hatch_glove") || nm == "hatch_trunks"
         }
+        fillSlot = IntArray(n) { -1 }
+        for ((sl, nm) in FILL_PARTS.withIndex()) { val pi = set.part(nm); if (pi >= 0) fillSlot[pi] = sl }
         pHead = set.part("head"); pTorso = set.part("torso"); pHatchTorso = set.part("hatch_torso")
         pGloveL = set.part("glove_L"); pGloveR = set.part("glove_R"); pHatchGloveL = set.part("hatch_glove_L"); pHatchGloveR = set.part("hatch_glove_R")
         pPupilL = set.part("pupil_L"); pPupilR = set.part("pupil_R"); pEyes = set.part("eyes")
@@ -635,6 +654,7 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         val extendPart = if (b.extend) (if (b.flashGlove == Hand.LEFT) pGloveL else if (b.flashGlove == Hand.RIGHT) pGloveR else -1) else -1
         val extendHatch = if (b.extend) (if (b.flashGlove == Hand.LEFT) pHatchGloveL else if (b.flashGlove == Hand.RIGHT) pHatchGloveR else -1) else -1
         crestN = 0
+        java.util.Arrays.fill(fillCount, 0)
         set.walkFrame(frame, place) { x0, y0, z0, x1, y1, z1, pi ->
             val s = pi.coerceAtMost(SpriteMaterial.MAX_PARTS - 1) * 4
             val g = tint[s + 3]
@@ -647,8 +667,81 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             }
             val head = pi < isHeadPart.size && isHeadPart[pi]
             emitSeg(x0, y0, z0, x1, y1, z1, tint[s], tint[s + 1], tint[s + 2], g, head, ct, st, sxz, sy, pi == extendPart || pi == extendHatch)
+            val sl = if (pi < fillSlot.size) fillSlot[pi] else -1
+            if (sl >= 0) {
+                val k = fillCount[sl]
+                if (k < FILL_CAP) {
+                    System.arraycopy(segOut, 0, fillBuf[sl], k * 6, 6)
+                    fillCount[sl] = k + 1
+                    val t = fillTint[sl]; t[0] = tint[s]; t[1] = tint[s + 1]; t[2] = tint[s + 2]; t[3] = g
+                }
+            }
         }
         crestPass(b, tint, ct, st, sxz, sy)
+        fillPass()
+    }
+
+    /**
+     * THE CEL FILL (§7.3, and the owner's "can the characters be filled with cell shading effects
+     * to give them more comic book color?").
+     *
+     * A stroke renderer has no fills, and the first answer to that question was HATCHING — lines
+     * at a 2.5 cm pitch inside the silhouette. Hatching is what a printer does when it cannot
+     * print colour; the cabinet's artists could, and on a waveguide, where black is nothing at all
+     * and the picture is its own light, a flat block of saturated colour is the cheapest thing
+     * there is. So the fills are real now, and they are built from geometry that already exists:
+     * every part in [FILL_PARTS] is ONE closed loop (or a stack of parallel copies of one loop —
+     * the doubled comic contour, the glove's tripled one) around ONE centre, so the polygon can be
+     * triangulated as a FAN FROM ITS OWN CENTROID, one triangle per segment, with no ordering
+     * assumption whatsoever. Segment order in the frame table is arbitrary and this does not care:
+     * a star-shaped loop fans correctly from its centroid however its edges arrive. That is why
+     * the list is five parts and not twenty — `boots` is two quads with the centroid in the air
+     * between them, `ears` likewise, and a fan there would web the gap.
+     *
+     * WHY IT IS CEL SHADING AND NOT A GLOW. Two tones, per vertex: the outer ring of the fan runs
+     * from [FILL_SHADE] on the dark side to [FILL_LIT] on the lit one across the part's own width
+     * (the key light is the ring's, from his right), and the centroid sits at [FILL_CORE] between
+     * them. Interpolated across a triangle that reads as a body with a lit side and a shaded one —
+     * the flat-colour-plus-hard-outline look of a printed panel — for three vertices a segment and
+     * no new authoring in Blender at all.
+     *
+     * WHY THE TONE IS DIVIDED BY THE LOOP COUNT ([FILL_LOOPS]). The contour is drawn 2 or 3 times
+     * 1.5 cm apart, so the fan is too, and the interior would otherwise stack to 2x or 3x. Divided,
+     * the interior lands on one tone and the narrow bands between the loops fall a step short of
+     * it — which is free, and is exactly the inked edge a colourist leaves inside a heavy outline.
+     *
+     * The colour is the TINT TABLE'S, not the asset's, so all of it comes along: the fighter's
+     * palette, the telegraph glove going white (a filled white mitt is the most legible telegraph
+     * in the game), the two-frame impact white on the head and the torso, and the dim of the title.
+     */
+    private fun fillPass() {
+        for (sl in FILL_PARTS.indices) {
+            val n = fillCount[sl]
+            if (n < 3) continue
+            val t = fillTint[sl]
+            val a = t[3] * FILL_BASE / FILL_LOOPS[sl]
+            if (a <= 0.002f) continue
+            val buf = fillBuf[sl]
+            var cx = 0f; var cy = 0f; var cz = 0f
+            var uMin = Float.MAX_VALUE; var uMax = -Float.MAX_VALUE
+            for (i in 0 until n * 6 step 3) {
+                cx += buf[i]; cy += buf[i + 1]; cz += buf[i + 2]
+                val u = buf[i] * ux + buf[i + 2] * uz
+                if (u < uMin) uMin = u
+                if (u > uMax) uMax = u
+            }
+            val inv = 1f / (n * 2f)
+            cx *= inv; cy *= inv; cz *= inv
+            val span = (uMax - uMin).coerceAtLeast(1e-4f)
+            val core = a * FILL_CORE
+            for (i in 0 until n * 6 step 6) {
+                fillBatch.v(cx, cy, cz, t[0], t[1], t[2], core)
+                var u = (buf[i] * ux + buf[i + 2] * uz - uMin) / span
+                fillBatch.v(buf[i], buf[i + 1], buf[i + 2], t[0], t[1], t[2], a * (FILL_SHADE + (FILL_LIT - FILL_SHADE) * u))
+                u = (buf[i + 3] * ux + buf[i + 5] * uz - uMin) / span
+                fillBatch.v(buf[i + 3], buf[i + 4], buf[i + 5], t[0], t[1], t[2], a * (FILL_SHADE + (FILL_LIT - FILL_SHADE) * u))
+            }
+        }
     }
 
     /**
@@ -757,8 +850,10 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
             ax = Boxer.X + (ax - Boxer.X) * sxz; az = Boxer.Z + (az - Boxer.Z) * sxz; ay *= sy
             bx = Boxer.X + (bx - Boxer.X) * sxz; bz = Boxer.Z + (bz - Boxer.Z) * sxz; by *= sy
         }
+        ax += kickWx; ay += kickWy; bx += kickWx; by += kickWy
+        segOut[0] = ax; segOut[1] = ay; segOut[2] = az; segOut[3] = bx; segOut[4] = by; segOut[5] = bz
         val out = if (extend) extendBatch else lines
-        out.v(ax + kickWx, ay + kickWy, az, r, g, bl, a); out.v(bx + kickWx, by + kickWy, bz, r, g, bl, a)
+        out.v(ax, ay, az, r, g, bl, a); out.v(bx, by, bz, r, g, bl, a)
     }
 
     /**
@@ -972,8 +1067,13 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         if (pose != null && refereeModel.parts.isNotEmpty()) {
             pose.reset()
             if (refereeArm >= 0) pose.roll[refereeArm] = refArm
-            refereeModel.walk(refPlace, pose) { x0, y0, z0, x1, y1, z1, _ ->
-                lines.v(x0, y0, z0, WHITE[0], WHITE[1], WHITE[2], a); lines.v(x1, y1, z1, WHITE[0], WHITE[1], WHITE[2], a)
+            // HIS OWN COLOURS, not a flat white. The asset authors the shirt and the face at white
+            // and the trousers and shoes at a dim slate, which is what makes a man in uniform out of
+            // ninety strokes — and it is also how he stays out of the boxer's way, by TONE rather
+            // than by being drawn badly. Nothing on him ever flashes (see `blender/assets/referee.py`).
+            refereeModel.walk(refPlace, pose) { x0, y0, z0, x1, y1, z1, pi ->
+                val c = refereeModel.parts[pi].color
+                lines.v(x0, y0, z0, c[0], c[1], c[2], a); lines.v(x1, y1, z1, c[0], c[1], c[2], a)
             }
         } else {
             val cy = cos(refPlace.yaw); val sy = sin(refPlace.yaw)
@@ -1249,9 +1349,15 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
     companion object {
         private const val TAG = "X3Knockout"
 
-        /** The hatch gains (§7.3): skin at 0.35, the colour blocks (gloves, trunks) at 0.55, both × √(2.6 / d). */
-        const val HATCH_SKIN = 0.35f
-        const val HATCH_BLOCK = 0.55f
+        /**
+         * The hatch gains (§7.3), × √(2.6 / d). They came DOWN from 0.35 / 0.55 when the cel fills
+         * arrived: hatching was standing in for colour it could not print, and with a real flat
+         * underneath it the same numbers read as scribble over paint. What is left is texture —
+         * the cross-hatch you can still see inside the glove and across the jaw at 2 m, gone by
+         * the time the fill is all that is left of him at 4.
+         */
+        const val HATCH_SKIN = 0.20f
+        const val HATCH_BLOCK = 0.30f
         /** DETAIL parts' LOD hysteresis (§12.7): off beyond 3.4 m, on inside 3.0 m. */
         const val DETAIL_FAR = 3.4f
         const val DETAIL_NEAR = 3.0f
@@ -1275,6 +1381,21 @@ class GLRenderer(private val ctx: Context, private val fight: Fight, private val
         const val YOU_DOWN_SINK = 0.40f
         /** The crest buffer: five spikes' segments held back for the droop pass. */
         private const val CREST_CAP = 320
+        /**
+         * THE CEL FILL (see [fillPass]). The five parts that are one closed loop about one centre
+         * and can therefore be fanned from their own centroid, and how many parallel copies of
+         * that loop the comic contour draws — the tone is divided by it so the interior lands on
+         * one flat colour instead of two or three stacked.
+         */
+        val FILL_PARTS = arrayOf("head", "torso", "trunks", "glove_L", "glove_R")
+        val FILL_LOOPS = floatArrayOf(2f, 2f, 1f, 3f, 3f)
+        /** Segments a fill part may contribute in a frame (the tripled glove with its laces is 86). */
+        const val FILL_CAP = 128
+        /** The flat's tone under a full-gain outline, and the cel ramp across it: shade, centre, lit. */
+        const val FILL_BASE = 0.52f
+        const val FILL_SHADE = 0.40f
+        const val FILL_CORE = 0.85f
+        const val FILL_LIT = 1.35f
         /** The referee's marks: his post between rounds, beside the fallen man for the count. */
         const val REF_HOME_X = -2.55f
         const val REF_HOME_Z = -5.15f

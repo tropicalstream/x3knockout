@@ -83,13 +83,21 @@ class Clock {
 
         // ---------------------------------------------------------------- the base floor
         /**
-         * The floor when nobody has overridden it — the title, the menus, a fight state that has
-         * not written [floorOverride] this frame. In a fight the boxer's state owns the floor
-         * (DESIGN.md §2.2); these are what x3discs shipped and what the lab ladder A/Bs.
+         * THE FLOOR. One number, the whole game (LAW.md §1.2, DESIGN.md §0.1): the fraction of real
+         * time the world creeps at when the player is perfectly still.
+         *
+         * It used to be three — 0.03 / 0.05 / 0.08 by difficulty, on top of a four-branch table in
+         * the boxer that raised it to 0.35 whenever he was merely standing there. That made THE
+         * CLOCK the difficulty dial, which is the one thing the owner's ruling forbids: in SUPERHOT
+         * the time function is the same in the first room and the last, and what gets harder is the
+         * ROOM. Nobody gets a faster world for being on HARD; the difficulty rows keep every other
+         * lever they have (his HP, his tells, his damage, his patience, which men are on the card).
+         *
+         * 0.03 is what x3discs shipped on this hardware and what SUPERHOT itself sits near. At 0.03
+         * a 12 fps strip frame holds 2.78 real seconds — unambiguously a held pose — and a thrown
+         * glove crawls at about 7 cm/s: still moving, so the picture is alive rather than hung.
          */
-        const val FLOOR_EASY = 0.03f
-        const val FLOOR_NORMAL = 0.05f
-        const val FLOOR_HARD = 0.08f
+        const val FLOOR_STILL = 0.03f
         /** The lab's override ladder, 3 / 5 / 8 / 12 / 20 % — lab only; off the lab the floor follows difficulty. */
         val LAB_FLOORS = floatArrayOf(0.03f, 0.05f, 0.08f, 0.12f, 0.20f)
         /** [labFloor] set to this means "follow difficulty", which is what a shipped build does. */
@@ -204,8 +212,7 @@ class Clock {
 
     /** The difficulty or lab floor — what [floor] falls back to with no override in force. */
     val baseFloor: Float
-        get() = if (labFloor in LAB_FLOORS.indices) LAB_FLOORS[labFloor]
-        else when (difficulty) { 0 -> FLOOR_EASY; 2 -> FLOOR_HARD; else -> FLOOR_NORMAL }
+        get() = if (labFloor in LAB_FLOORS.indices) LAB_FLOORS[labFloor] else FLOOR_STILL
 
     /** The floor the world creeps at when the player is perfectly still, override first. */
     val floor: Float

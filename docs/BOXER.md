@@ -5,11 +5,21 @@
 > the SUPERHOT VR mechanic is the game, and it does not get an exception for the moment that matters.
 > Columns headed `(real)` in the first draft now read `(world)`.
 
-> **AMENDED 2026-09-10 — `docs/LAW.md`, which outranks this file on the clock.** **He no longer
-> writes the floor.** `FLOOR_IDLE`, `FLOOR_DEEP`, `FLOOR_FUSE_TOP`, `FLOOR_OPEN`, `HANG_T`,
-> `FUSE_T`, `floorNow()`, `burnHangAndFuse()` and `Listener.onFuseBurned` are all deleted, and
-> everywhere below that says "the hang and the fuse stretch the tell for a still player", read
-> instead: **the player's own stillness stretches it, without limit, and nothing takes it back.**
+> **AMENDED 2026-09-10 — ONE FLOOR, and what of `docs/LAW.md` is actually built.** `FLOOR_IDLE`
+> (0.35), `FLOOR_FUSE_TOP` (0.60), `FLOOR_OPEN` (0.12) and the per-difficulty `FLOOR_DEEP` array
+> are **deleted**. `floorNow()` survives as four words — a knockdown returns −1 so the fight can
+> own the count's clock, and every other phase returns the one game-wide floor, `Clock.FLOOR_STILL
+> = 0.03`, on EASY, NORMAL and HARD alike. Everywhere below that says "the hang and the fuse
+> stretch the tell for a still player", read instead: **the player's own stillness stretches it,
+> and the fuse no longer takes any of it back.**
+>
+> `HANG_T`, `FUSE_T`, `burnHangAndFuse()` and `Listener.onFuseBurned` are **still here and still
+> run on real time** — they no longer touch the floor, they bound the READ (the hang is how long a
+> tell is unreadable-fast, the fuse is what makes him commit and what the crowd boos through). The
+> rest of LAW.md — the yaw/dodge axis split (§1.3, "looking is free"), the forced punch as a rate
+> rather than a rail (§5), the ×1.8 re-derivation of every world-timed window (§6), the frozen-state
+> legibility work (§8) — is **specified and not yet built**. It is the next thing to do to the clock,
+> not a description of this build.
 > A tell authored at 0.50 world seconds costs a moving player 0.50 real seconds and a perfectly
 > still one **16.7** — not the 2.1 the fuse used to impose. His numbers in §3 and §8 are unchanged;
 > what changed is that they are now the only clock on him.

@@ -1,5 +1,13 @@
 # X3 KNOCKOUT — GAME DESIGN DOCUMENT (prototype: one boxer)
 
+> **STATUS 2026-09-10 — the one-floor law SHIPPED; the rest of `docs/LAW.md` has not.** What is in
+> the build: `Boxer.floorNow()` collapsed from a four-branch table to one game-wide floor, and
+> `Clock.FLOOR_STILL = 0.03` for every difficulty (LAW.md §1.2, and rule 1 of §0.1 below). Measured
+> on the glasses the same afternoon: a still player, mid-round, reads `ts=0.06` where the old build
+> could not go below 0.35. What is NOT in the build: LAW.md §1.3 (the yaw/dodge split), §5 (the
+> forced rate), §6 (the ×1.8 window re-derivation) and §8 (the frozen-state legibility work). The
+> hang and the fuse are still there and still real-time; they no longer touch the floor.
+>
 > **AMENDED 2026-09-10 — `docs/LAW.md` IS NOW THE AUTHORITY ON THE CLOCK, and §1 and §2 defer to
 > it.** The owner played the build and reported that he could not see the SUPERHOT mechanic at all.
 > He was right, and the cause is one number: `Boxer.FLOOR_IDLE = 0.35` meant the world never ran
@@ -804,9 +812,17 @@ EASY until the first clear).
   (§12.5): amplitude from the crowd meter, a phase across x so it reads as a wave, floor-clamped
   so feet stay planted. A standing ovation on a knockdown and the KO: amplitude 0.2, α 0.6, the
   front row bounces. The crowd costs the CPU nothing.
-- **The referee** [new `referee.json`]: nine white strokes at the far-left post (head 4, body 1,
-  arms 2, legs 2). On a knockdown he slides to centre over 0.6 s and alternates arm-up / arm-down
-  per count (two `arm_R` angles — no strip needed); the numerals are the plate's.
+- **The referee** [`referee.json`, rebuilt 2026-09-10]: **a man, 92 strokes** at the far-left post
+  — a face, a white shirt with a collar, a bow tie, short sleeves, a belt, doubled arms with
+  fists, slate trousers and shoes. He was nine strokes (a diamond head, one line per limb) on the
+  argument that at 5 m nothing more reads; that was wrong twice over, because a stick figure
+  standing beside a fully drawn caricature does not read as economy, it reads as a placeholder,
+  and the eye goes to it *because* it is wrong. He stays out of the boxer's way by TONE, not by
+  poverty: shirt and face at white, trousers and shoes at a dim slate `(0.45, 0.55, 0.68)` /
+  `(0.34, 0.42, 0.55)`, the whole man drawn at α 0.4 (title) / 0.55 (round) / 0.95 (count), and
+  nothing on him ever flashes. On a knockdown he slides to centre over 0.6 s and alternates
+  arm-up / arm-down per count — a `Pose.roll` on `arm_R` about the right shoulder `(0.20, 1.42)`
+  swings the whole arm, elbow bend and fist included, with no strip; the numerals are the plate's.
 - **Eye** 1.65 m standing [on disk]. The near plane is 0.15 m and there is no clipping; nothing in
   the world is ever drawn nearer than 0.30 m to the eye — the boxer's extend frame stops at 1.2 m
   and his glove growing 1.8× is how "it reaches you" is drawn (§7.5).
@@ -841,10 +857,11 @@ Linear stroke units as `Hud.kt` defines them; reuse the constants, add nothing o
 |---|---|---|
 | The boxer's outline (head, body, arms) | MAGENTA `(1.00, 0.15, 0.60)` — the suite's threat hue, ruled on-head against red and orange | on a hit: WHITE tint α 1.5, 2 frames |
 | His gloves | RED `(1.00, 0.22, 0.18)` | the punching glove: WHITE α 1.5 for the whole tell; the extend: gain 1.6 |
-| His colour blocks (hatch) | the part's hue at gain 0.35 (skin) / 0.55 (gloves, trunks) | never flashes, except the telegraph glove's hatch → 1.0 |
+| His CEL FILLS (head, torso, trunks, both gloves) | the part's own tint, flat, at 0.52 × the cel ramp (0.40 shade → 0.85 centre → 1.35 lit) | follows the tint table, so the telegraph glove and the impact white fill too |
+| His colour blocks (hatch) | the part's hue at gain 0.20 (skin) / 0.30 (gloves, trunks) — down from 0.35 / 0.55 now that the fills carry the colour | never flashes, except the telegraph glove's hatch → 1.0 |
 | His eyes | WHITE `(0.92, 1, 1)` rings, MAGENTA pupils | pupils → WHITE α 1.4 on a tell |
 | His crest | VIOLET `(0.60, 0.20, 1.00)` | GOLD `(1.00, 0.78, 0.35)` for a hook, WHITE for the uppercut, AMBER dim when he waits you out |
-| His trunks | CYAN `(0.35, 0.95, 1.00)` hatch at 0.55 | |
+| His trunks | CYAN `(0.35, 0.95, 1.00)`, filled, hatch at 0.30 | |
 | Your gloves and forearms | ACID `(0.50, 1.00, 0.20)` at α 0.9 — the cabinet's green wireframe | on impact: WHITE α 1.3, 2 frames |
 | Your special | AMBER `(1.00, 0.78, 0.35)` + a 12-point WHITE-GOLD starburst | |
 | Ropes, posts, canvas grid | BLUE `(0.30, 0.50, 1.00)` at 0.6 / 0.18 | the multiplier glow |
@@ -897,8 +914,27 @@ thumb bump.
   three times the weight of an interior stroke, on any driver, at every distance in the fight band.
   Interior detail (brows, mouth, laces, seams) is single-weight. The weight difference IS the comic
   look; keep it strict.
-- **Colour blocks are hatching**: parallel strokes at 2.5 cm pitch (≈ 5.7 px) inside a contour, on
-  a `hatch_<part>` object sharing the part's pivot, at gain 0.35 (skin) / 0.55 (gloves, trunks);
+- **Colour blocks are CEL FILLS** (2026-09-10, the owner: *"can the characters be filled with cell
+  shading effects to give them more comic book color?"*). A stroke renderer has no fills, and the
+  first answer was hatching — which is what a printer does when it cannot print colour. On a
+  waveguide, where black is nothing at all and the picture is its own light, a flat block of
+  saturated colour is the cheapest thing there is, so the flats are real now and they are built
+  from geometry that already exists. `GLRenderer.fillPass` takes the five parts that are ONE
+  closed loop about ONE centre — `head`, `torso`, `trunks`, `glove_L`, `glove_R` — and fans each
+  from its own centroid, one `GL_TRIANGLES` triangle per segment, which needs no ordering
+  assumption at all (a star-shaped loop fans correctly however its edges arrive). Two tones, per
+  vertex: the outer ring runs 0.40 (shade) → 1.35 (lit) across the part's own width against the
+  ring's key light and the centroid sits at 0.85, so a flat reads as a body with a lit side. The
+  tone is divided by the contour's loop count (2, 2, 1, 3, 3) because the comic outline is drawn
+  two or three times over. Colour comes from the TINT TABLE, not the asset, so the fighter's
+  palette, the telegraph glove's white and the two-frame impact white all fill too — a filled
+  white mitt is the most legible telegraph in the game. Cost: ≈ 750 vertices, no measured frame
+  time, no new authoring in Blender. `boots` and `ears` are excluded: two loops with the centroid
+  in the air between them, and a fan there would web the gap.
+- **Hatching is now texture, not colour**: parallel strokes at 2.5 cm pitch (≈ 5.7 px) inside a
+  contour, on a `hatch_<part>` object sharing the part's pivot, at gain 0.20 (skin) / 0.30
+  (gloves, trunks) — down from 0.35 / 0.55, because the same numbers over a real flat read as
+  scribble over paint;
   the shadow side cross-hatched (more ink = brighter here, and the eye still reads density as
   shading). Held constant over distance by `gain × √(2.6 / d)`. Cap: 320 hatch segments, and hatch
   never flashes — it is the first thing that can flood the whiteish-pixel test.
@@ -1091,7 +1127,7 @@ its LOUDNESS is real.
 
 ### 9.4 The voices — MOVED to `docs/VOICE.md`
 The roster, the five verified ffmpeg chains, the separation law, the per-fighter keying, the
-referee's introductions and all **84 clips** are in `docs/VOICE.md`, which is the file
+referee's introductions and all **98 clips** are in `docs/VOICE.md`, which is the file
 `tools/extract_lines.py` parses. What was here was a five-speaker table for a one-boxer prototype;
 the card has five men now, so the fifth speaker is not a character but a **role — THE MAN IN THE
 RING** — and every line that depends on which of them is up is keyed `<stem>_<fighter.id>`.

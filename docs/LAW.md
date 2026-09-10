@@ -1,5 +1,13 @@
 # THE TIME LAW — the authority
 
+> **BUILD STATUS 2026-09-10.** §1.2 is **shipped**: one floor for the whole game, `Clock.FLOOR_STILL
+> = 0.03`, difficulty-independent, and `Boxer.floorNow()` is now two lines (−1 through a knockdown,
+> the floor everywhere else). Measured on the glasses that afternoon a still player mid-round reads
+> `ts=0.06`; the build this document was written against could not go below 0.35. **Everything else
+> here is still specification**: §1.3's axis split, §5's forced rate, §6's ×1.8 re-derivation and
+> §8's legibility work are not in the code, and the hang and the fuse were NOT deleted — they still
+> run on real time, they simply no longer touch the floor.
+
 > **This document outranks DESIGN.md §2 wherever they differ.** §2 described a floor handed to the
 > boxer's state (0.35 idle, a 0.8 s hang at 0.06, a 1.2 s fuse ramping to 0.60). That design was
 > built, played on the owner's head, and produced the verdict this document exists to answer:

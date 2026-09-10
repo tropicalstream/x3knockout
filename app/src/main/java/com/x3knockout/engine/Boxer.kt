@@ -102,14 +102,6 @@ class Boxer {
         const val DESPERATE_HP_FRAC = 0.25f
 
         // ---------------------------------------------------------------- the floor he hands the clock (DESIGN.md §2.2)
-        /** IDLE / circling / taunting / feinting / guard up: the fight never looks paused. */
-        const val FLOOR_IDLE = 0.35f
-        /** The hang's deep floor by difficulty — bullet time for the read. */
-        val FLOOR_DEEP = floatArrayOf(0.04f, 0.06f, 0.10f)
-        /** The fuse ramps the floor from deep to this and holds: he does not wait forever. */
-        const val FLOOR_FUSE_TOP = 0.60f
-        /** RECOVER after a whiff, OPEN, STAGGER, STUN: measured in your punches, not in seconds. */
-        const val FLOOR_OPEN = 0.12f
         /** `HANG_T` by difficulty (real seconds), and the lab's ladder for the `HANG` row. */
         val HANG_T = floatArrayOf(1.2f, 0.8f, 0.5f)
         val HANG_LAB = floatArrayOf(0.5f, 0.8f, 1.2f)
@@ -780,16 +772,32 @@ class Boxer {
      * at rate 1 sees the strike the artist authored (0.25 / 0.33 s). The first draft returned −1
      * here and the fight forced `Clock.forceStrike`; that made "yours lands first" a bet nobody
      * could win, because his glove never slowed for anything.
+     *
+     * ONE FLOOR, EVERYWHERE — the owner's ruling (DESIGN.md §0.1: the enemy sets the pace, never
+     * the clock), and the fix for "i dont really see the superhotvr motion mechanics".
+     *
+     * This used to be a table: 0.35 while he was idle, a deep 0.04–0.10 only during the tell's
+     * hang, then a 1.2 s fuse ramping back to 0.60, and 0.12 through a recovery. Four numbers, and
+     * every one of them above the deep floor was THE CLOCK APPLYING PRESSURE — the world running
+     * without the player. The effect on the glass was a fight that never ran slower than about a
+     * third speed, which is slow motion with variations and not the bargain the game is built on.
+     * A player standing perfectly still could not freeze anything, so the mechanic was invisible.
+     *
+     * Now there is one number and it is a constant of the GAME, not of the fight, the round or the
+     * fighter: stand still and the world very nearly stops, in round one of the Rooster and in
+     * round three of the Metronome alike. A glove leaves his shoulder and HANGS by your cheek for
+     * as long as you can hold your nerve.
+     *
+     * WHAT ANSWERS A STATUE is now entirely his and entirely visible — the crowd's boos, his crest
+     * going amber, his next tell shortening, the forced feint the rail openly declares, and a round
+     * clock that runs on WORLD time so standing still does not run it out either. Every one of
+     * those is something the player can watch arrive. A floor raised behind their back is not.
+     *
+     * A KNOCKDOWN still returns −1 (the fight owns the clock through the count).
      */
     fun floorNow(deep: Float): Float = when (phase) {
-        Phase.IDLE, Phase.TAUNT, Phase.FEINT, Phase.WIN -> FLOOR_IDLE
-        Phase.TELL, Phase.STRIKE -> when {
-            hangLeft > 0f -> deep
-            fuseLeft > 0f -> deep + (FLOOR_FUSE_TOP - deep) * (1f - fuseLeft / FUSE_T).coerceIn(0f, 1f)
-            else -> FLOOR_FUSE_TOP
-        }
-        Phase.RECOVER, Phase.STAGGER, Phase.STUN, Phase.HIT -> FLOOR_OPEN
         Phase.KNOCKDOWN, Phase.DOWN, Phase.GETUP, Phase.KO -> -1f
+        else -> deep
     }
 
     // ------------------------------------------------------------------ the real-time bookkeeping
