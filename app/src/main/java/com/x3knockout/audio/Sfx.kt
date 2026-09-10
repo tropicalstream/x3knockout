@@ -1,0 +1,465 @@
+package com.x3knockout.audio
+
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.SoundPool
+import android.os.Handler
+import android.os.HandlerThread
+import java.io.BufferedOutputStream
+import java.io.DataOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.sin
+import kotlin.random.Random
+
+/**
+ * Synthesised SFX bank — no audio binaries besides the voice lines and the one music track.
+ * Everything is generated into WAV files in the cache at first launch and played through a
+ * SoundPool on its own thread (SoundPool.play is a binder call; the GL thread never waits on it).
+ */
+class Sfx(private val context: Context) {
+
+    companion object {
+        const val FIRE = 0          // the tank cannon: a bright sawtooth zap
+        const val ENEMY_FIRE = 1    // Recognizer bolt: lower, buzzier
+        const val DEREZ = 2         // a Recognizer loses cohesion — see the [DEREZ SOUND] note
+        const val HIT = 3           // tank takes a hit
+        const val DIE = 4           // the tank's own derez: the same collapse, slower and deeper
+        const val BIT = 5           // (unused since the Bit found its voice — see BIT_GET)
+        const val BUMP = 6          // wall bump
+        const val TICK = 7          // menu tick
+        const val SELECT = 8        // menu select
+        const val WAVE = 9          // wave start sting
+        const val CLEAR = 10        // wave cleared
+        const val GAMEOVER = 11
+        const val HISCORE = 12
+        const val START = 13
+        const val LOCK = 14         // a Recognizer locks on
+        const val SPAWN = 15        // Recognizer materialises
+        const val THRUST = 16       // a movement impulse
+        const val RICOCHET = 17     // shell hits a wall
+        const val HUM = 18          // looping Recognizer hover hum (nearest one)
+        const val TURN = 19         // the hull's quarter turn: a servo whirr
+        // ---- the Bit's voice. It says yes and no and nothing else; that is its whole character.
+        const val BIT_YES = 20      // bright rising two-note
+        const val BIT_NO = 21       // lower, dissonant, buzzier
+        const val BIT_CHIRP = 22    // idle chatter — pitched and paced by how close you are
+        const val BIT_GET = 23      // taken
+        const val BIT_LOSE = 24     // lost: the same shapes falling instead of rising
+        // ---- the energy pool and the shield it buys
+        const val POOL_SIP = 25     // one pull of energy while the tank stands in the pool
+        const val SHIELD_UP = 26    // the draw completes and the shell seals
+        const val SHIELD_HIT = 27   // the shell eats a bolt
+        const val SHIELD_DOWN = 28  // the last charge goes — the DEREZ, an octave up and half as long
+        // ---- the Recognizer's disc, and the crush
+        const val DISC_HIT = 29     // a disc lands on the hull: the strike itself, under HIT or SHIELD_HIT
+        const val DISC_PASS = 30    // a disc goes past the periscope — the whoosh of a near miss
+        const val CRUSH_ARM = 31    // the gantry rises over the tank: servos spinning up
+        const val CRUSH_SLAM = 32   // it comes down and the legs close: the landing beat
+        const val CRUSH_GRIND = 33  // the clamp straining on the hull
+        const val CRUSH_OPEN = 34   // the legs let go and it lifts off
+        const val TRACKING = 35     // a Recognizer has the line and is bringing its cab round — MOVE
+        const val DISC_CUT = 36     // a player shell meets a disc in the air and takes it apart
+        const val SCATTER = 37      // the arena falls back after a death: the machines reel off
+        const val WINDUP = 38       // the disc is coming off the rail — the beat to MOVE on
+        const val POOL_TAKE = 39    // the pool pays out: the draw is worth the drive
+        private const val COUNT = 40
+        private const val RATE = 22050
+    }
+
+    private val pool = SoundPool.Builder().setMaxStreams(12).setAudioAttributes(
+        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+    ).build()
+    private val ids = IntArray(COUNT)
+    @Volatile private var loaded = false
+    @Volatile var volume = 0.7f
+    @Volatile var duckProvider: (() -> Boolean)? = null
+    private var humStream = 0
+    private val rng = Random(17)
+    private var thread: HandlerThread? = null
+    private var handler: Handler? = null
+
+    fun loadAsync() {
+        thread = HandlerThread("x3knockout-sfx").apply { start() }
+        handler = Handler(thread!!.looper)
+        handler?.post {
+            runCatching {
+                val dir = File(context.cacheDir, "sfx").apply { mkdirs() }
+                ids[FIRE] = load(dir, "fire", buf(160) { t -> (saw(1500f - 1100f * t, t) * 0.6f + 0.25f * noise() * exp(-t * 30f)) * exp(-t * 14f) })
+                // THE DISC IS THROWN. The old bolt buzz, with a spin on it: a 26 Hz flutter that
+                // slows as the clip decays, so it reads as a thing set turning and let go rather
+                // than a beam. Still low and buzzy — it has to sit under the tank's own cannon.
+                ids[ENEMY_FIRE] = load(dir, "efire", buf(300) { t ->
+                    var v = sq(420f - 200f * t, t) * 0.40f + saw(210f, t) * 0.22f + sine(1400f - 900f * t, t) * 0.14f
+                    v *= 0.62f + 0.38f * sine(26f - 10f * t, t)
+                    v * exp(-t * 7.5f)
+                })
+                // ------------------------------------------------- the disc landing, and passing
+                // ON THE HULL. Three layers, all short: a sub thud (55 Hz, fast decay) for the
+                // weight, a burst of noise for the strike, and a metallic ring at 1.9 kHz that
+                // decays slower than either — the disc is a ringing thing and it has just hit a
+                // tank. Nothing in the old HIT had a transient this hard; the disc needed one.
+                ids[DISC_HIT] = load(dir, "dischit", buf(460) { t ->
+                    var v = sine(55f, t) * 0.70f * exp(-t * 9f)
+                    v += noise() * 0.85f * exp(-t * 38f)
+                    v += (sine(1900f, t) * 0.26f + sine(2850f, t) * 0.12f) * exp(-t * 7f) * (0.7f + 0.3f * sine(90f, t))
+                    v += sq(140f, t) * 0.18f * exp(-t * 14f)
+                    v * (1f - exp(-t * 400f))
+                })
+                // PAST THE EAR. Band-passed noise whose centre sweeps DOWN — a doppler in miniature
+                // — with a whistle riding on it that falls the same way. It is the one sound in the
+                // game that means "that would have hit you", and it must be felt, not heard.
+                ids[DISC_PASS] = load(dir, "discpass", buf(340) { t ->
+                    val env = sin(3.1416f * (t / 0.34f).coerceIn(0f, 1f))
+                    val f = 1500f - 1100f * t
+                    var v = noise() * 0.55f
+                    v = v * (0.55f + 0.45f * sine(f, t))          // a crude band-pass: noise modulated at the sweep
+                    v += sine(f * 1.6f, t) * 0.22f * env
+                    v * env * env
+                })
+                // ------------------------------------------------------------- the crush
+                // ARMING. Servos spinning up as the gantry rises over you: a whine climbing from
+                // 180 to 900 Hz with a 12 Hz flutter, under a growing hiss. It is the sound of a
+                // decision being made, and it is the player's last chance to shoot.
+                ids[CRUSH_ARM] = load(dir, "crusharm", buf(420) { t ->
+                    val f = 180f + 720f * (t / 0.42f).coerceIn(0f, 1f)
+                    var v = saw(f, t) * 0.32f + sq(f * 0.5f, t) * 0.14f + sine(f * 2f, t) * 0.10f
+                    v *= 0.70f + 0.30f * sine(12f, t)
+                    v += noise() * 0.18f * (t / 0.42f).coerceIn(0f, 1f)
+                    v * (1f - exp(-t * 60f)) * (1f - ((t - 0.36f) / 0.06f).coerceIn(0f, 1f))
+                })
+                // THE LANDING. The heaviest sound in the game and it earns it: a 38 Hz sub with a
+                // pitch drop for the mass coming down, a hard noise strike, an iron clang (two
+                // inharmonic partials) for the legs meeting, and a servo lock — a fast falling saw
+                // — on the tail. Half a second and then it is over, because the grind takes over.
+                ids[CRUSH_SLAM] = load(dir, "crushslam", buf(620) { t ->
+                    var v = sine(38f + 60f * exp(-t * 18f), t) * 0.85f * exp(-t * 5.5f)
+                    v += noise() * 0.95f * exp(-t * 30f)
+                    v += (sine(640f, t) * 0.30f + sine(1010f, t) * 0.20f + sine(2230f, t) * 0.10f) * exp(-t * 6f)
+                    v += saw(520f - 380f * (t / 0.25f).coerceIn(0f, 1f), t) * 0.22f * exp(-t * 9f)
+                    v += sq(70f, t) * 0.25f * exp(-t * 10f)
+                    v * (1f - exp(-t * 500f))
+                })
+                // STRAIN. The clamp holding on the hull: a low grinding buzz — saw against square
+                // at a rough fifth, gated at 22 Hz so it chatters — with a slow swell and a metal
+                // whine drifting on top. It stops when the legs open, whichever way that happens.
+                ids[CRUSH_GRIND] = load(dir, "crushgrind", buf(700) { t ->
+                    var v = saw(64f, t) * 0.36f + sq(96f, t) * 0.20f + saw(65.5f, t) * 0.18f
+                    val gate = if ((t * 22f).toInt() % 2 == 0) 1f else 0.35f
+                    v *= gate
+                    v += sine(1240f + 90f * sine(3f, t), t) * 0.10f
+                    v += noise() * 0.12f
+                    val env = sin(3.1416f * (t / 0.70f).coerceIn(0f, 1f))
+                    v * (0.35f + 0.65f * env)
+                })
+                // RELEASE. The servos reversing — a whine falling from 800 to 150 Hz — with a hiss
+                // of pressure let go and a soft clunk as the legs reach the end of their travel.
+                ids[CRUSH_OPEN] = load(dir, "crushopen", buf(480) { t ->
+                    val f = 800f - 650f * (t / 0.40f).coerceIn(0f, 1f)
+                    var v = saw(f, t) * 0.28f + sine(f * 2f, t) * 0.10f
+                    v *= 0.72f + 0.28f * sine(14f, t)
+                    v += noise() * 0.30f * exp(-t * 6f)
+                    if (t > 0.34f) { val lt = t - 0.34f; v += (sine(120f, lt) * 0.45f + noise() * 0.3f * exp(-lt * 40f)) * exp(-lt * 14f) }
+                    v * (1f - exp(-t * 80f)) * (1f - ((t - 0.42f) / 0.06f).coerceIn(0f, 1f))
+                })
+                // [DEREZ SOUND] — a program coming apart, not a crush. Four things happen at once
+                // and all four run DOWN: the tone falls 900→75 Hz; the grain gate slows from a
+                // 115 Hz buzz to ~8 Hz chunks, so continuous sound becomes discrete pieces; the
+                // bit-crusher OPENS UP (26 levels → 2), so what is left is coarser the longer it
+                // lasts; and the whole thing is cut to silence at 0.66 s inside a 0.76 s clip. That
+                // last 100 ms of nothing is the point — absence, arriving early enough to hear.
+                ids[DEREZ] = load(dir, "derez", buf(760) { t ->
+                    if (t > 0.66f) 0f else {
+                        val f = 75f + 830f * exp(-t * 5.2f)
+                        var v = saw(f, t) * 0.50f + sq(f * 0.5f, t) * 0.28f + sine(f * 2f, t) * 0.16f
+                        v += noise() * 0.55f * exp(-t * 26f)              // the shatter transient
+                        val gr = 7f + 110f * exp(-t * 3.4f)
+                        val gate = if ((t * gr).toInt() % 2 == 0) 1f else 0.16f
+                        val q = max(2f, 26f * exp(-t * 2.6f))
+                        v = (v * q).toInt() / q
+                        v * gate * exp(-t * 2.9f)
+                    }
+                })
+                ids[HIT] = load(dir, "hit", buf(420) { t -> (noise() * 0.5f + sq(110f, t) * 0.4f) * exp(-t * 6f) })
+                // ---------------------------------------------------- the beat you can still act on
+                // TRACKING. A quiet servo whine RISING through a fifth — the cab coming round onto
+                // you — under a thin bearing hiss, gated at 9 Hz so it reads as a mechanism turning
+                // rather than a tone. Deliberately dull and deliberately soft: it is not a warning,
+                // it is the sound of one being prepared, and it has to be unmistakably a smaller
+                // thing than the LOCK sting that follows it 0.62 s later. The caller pitches it by
+                // how far round the cab still has to come, so the swing is audible as a swing.
+                ids[TRACKING] = load(dir, "tracking", buf(340) { t ->
+                    val u = (t / 0.34f).coerceIn(0f, 1f)
+                    val f = 300f + 150f * u
+                    var v = saw(f, t) * 0.22f + sine(f * 1.5f, t) * 0.14f + sine(f * 0.5f, t) * 0.10f
+                    v *= 0.68f + 0.32f * sine(9f, t)
+                    v += noise() * 0.07f
+                    v * sin(3.1416f * u) * 0.9f
+                })
+                // A DISC CUT OUT OF THE AIR. Two things ringing struck together: a hard bright
+                // transient, then a shattered metallic chord (three inharmonic partials well above
+                // anything else in the mix) falling away fast. It has to be instantly separable
+                // from DISC_HIT — that one is a thud with a ring on it, this is all ring and no
+                // thud, because nothing hit the tank. That distinction IS the feedback.
+                ids[DISC_CUT] = load(dir, "disccut", buf(420) { t ->
+                    var v = noise() * 0.85f * exp(-t * 55f)
+                    v += (sine(2400f, t) * 0.30f + sine(3350f, t) * 0.20f + sine(4720f, t) * 0.12f) * exp(-t * 9f)
+                    v += sine(1180f - 400f * t, t) * 0.22f * exp(-t * 12f)
+                    v *= 0.75f + 0.25f * sine(70f, t)
+                    v * (1f - exp(-t * 600f))
+                })
+                // THE ARENA FALLS BACK. A wide descending sweep — the machines' own hover pitch
+                // dropping away — with a soft pressure release under it. It is the sound of space
+                // opening up, and it is the only cue that tells the player the window after a death
+                // is REAL. Long enough (0.9 s) to cover the beat, quiet enough to sit under the
+                // system's TANK HIT.
+                ids[SCATTER] = load(dir, "scatter", buf(900) { t ->
+                    val f = 460f * exp(-t * 2.6f) + 55f
+                    var v = saw(f, t) * 0.26f + sine(f * 0.5f, t) * 0.22f + sq(f * 2f, t) * 0.08f
+                    v *= 0.65f + 0.35f * sine(17f - 11f * t, t)
+                    v += noise() * 0.22f * exp(-t * 3.2f)
+                    v * (1f - exp(-t * 40f)) * exp(-t * 1.9f)
+                })
+                // THE WIND-UP — the third beat of the telegraph and the only one that means NOW.
+                //
+                // TRACKING is a servo turning, LOCK is a slit finding you, and both of those are
+                // states. This is a RELEASE: a hard rising third, two square partials climbing a
+                // fifth in 180 ms with a clean bright edge on the front of them, and no gate — the
+                // other two are gated at 9 and 17 Hz so they read as mechanism, and this one is
+                // deliberately smooth so it reads as a thing being LET GO. It is louder and higher
+                // than the LOCK sting it follows because it is the last thing the player is told
+                // before a disc is in the air, and it has to cut through the hover hum, the music
+                // and whatever the two voices are doing.
+                //
+                // Short on purpose. A cue that means "you have 0.38 s" cannot itself last half of
+                // them, so the whole event is over in 200 ms and the disc leaves into silence.
+                ids[WINDUP] = load(dir, "windup", buf(200) { t ->
+                    val u = (t / 0.2f).coerceIn(0f, 1f)
+                    val f = 620f + 560f * u * u
+                    var v = sq(f, t) * 0.34f + saw(f * 1.5f, t) * 0.16f + sine(f * 2f, t) * 0.12f
+                    v += noise() * 0.30f * exp(-t * 90f)
+                    v * (1f - exp(-t * 500f)) * exp(-t * 5.5f)
+                })
+                // THE POOL PAYS OUT. The shell sealing already has SHIELD_UP; this is the other
+                // half of a full draw — a short ascending arpeggio, coin-bright, the cabinet
+                // acknowledging that crossing the maze and standing still in it was worth doing.
+                ids[POOL_TAKE] = load(dir, "pooltake", buf(420) { t ->
+                    val step = (t / 0.09f).toInt().coerceAtMost(3)
+                    val f = floatArrayOf(880f, 1174f, 1568f, 2093f)[step]
+                    var v = sine(f, t) * 0.34f + sq(f * 2f, t) * 0.09f + sine(f * 3f, t) * 0.06f
+                    v *= 1f - exp(-(t - step * 0.09f).coerceAtLeast(0f) * 260f)
+                    v * exp(-t * 2.6f)
+                })
+                // The player's own derez: the same collapse an octave down and four times as long,
+                // with a wobble that widens as cohesion goes, and 250 ms of silence on the end.
+                ids[DIE] = load(dir, "die", buf(2400) { t ->
+                    if (t > 2.15f) 0f else {
+                        val f = 42f + 360f * exp(-t * 1.35f)
+                        var v = saw(f, t) * 0.40f + sq(f * 0.5f, t) * 0.24f + sine(f * 0.5f, t) * 0.30f
+                        v += noise() * 0.5f * exp(-t * 9f)
+                        v *= 1f + 0.45f * sine(7f - 5f * t, t)
+                        val gr = 4f + 90f * exp(-t * 1.5f)
+                        val gate = if ((t * gr).toInt() % 2 == 0) 1f else 0.12f
+                        val q = max(2f, 24f * exp(-t * 1.1f))
+                        v = (v * q).toInt() / q
+                        v * gate * exp(-t * 1.15f)
+                    }
+                })
+                // ---------------------------------------------------------------- the Bit's voice
+                // YES: two notes UP, C6 then G6, the second gliding up as it goes. Sine-led with a
+                // little square on top so it is bright and digital rather than a flute.
+                ids[BIT_YES] = load(dir, "bityes", buf(240) { t ->
+                    val second = t >= 0.085f
+                    val lt = if (second) t - 0.085f else t
+                    val f = (if (second) 1568f else 1046f) * (if (second) 1f + 0.34f * lt else 1f)
+                    (sine(f, lt) * 0.60f + sine(f * 2f, lt) * 0.20f + sq(f, lt) * 0.13f) * exp(-lt * 11f)
+                })
+                // NO: two notes DOWN, G4 then C#4 — a tritone apart, which is the most disagreeable
+                // interval there is — square-led, detuned against itself so it beats, and ring-
+                // modulated at 34 Hz for the growl. Nobody will mistake it for the YES.
+                ids[BIT_NO] = load(dir, "bitno", buf(360) { t ->
+                    val second = t >= 0.12f
+                    val lt = if (second) t - 0.12f else t
+                    val f = if (second) 277f else 392f
+                    var v = sq(f, lt) * 0.40f + saw(f * 1.008f, lt) * 0.30f + sq(f * 1.414f, lt) * 0.20f
+                    v *= 0.70f + 0.30f * sine(34f, t)
+                    v * exp(-lt * 6.5f)
+                })
+                // The idle chirp: one blip, rising hard. Played at a pitch and pace set by range —
+                // one asset, a whole proximity cue.
+                ids[BIT_CHIRP] = load(dir, "bitchirp", buf(90) { t ->
+                    val f = 1250f + 9800f * t
+                    (sine(f, t) * 0.65f + sq(f * 0.5f, t) * 0.15f) * exp(-t * 34f)
+                })
+                // Taken: the YES's interval opened out into a full rising figure, with a shimmer
+                // tail that keeps ringing after the notes have gone.
+                ids[BIT_GET] = load(dir, "bitget", buf(620) { t ->
+                    var v = 0f
+                    val notes = floatArrayOf(1046f, 1318f, 1568f, 2093f, 2637f)
+                    for ((i, f) in notes.withIndex()) {
+                        val st = i * 0.045f
+                        if (t >= st) { val lt = t - st; v += (sine(f, lt) * 0.50f + sine(f * 2f, lt) * 0.15f + sq(f, lt) * 0.09f) * exp(-lt * 6.5f) }
+                    }
+                    v += sine(3136f, t) * 0.18f * exp(-t * 3.2f) * (0.6f + 0.4f * sine(9f, t))
+                    v * 0.55f
+                })
+                // Lost: the same figure falling, crushed coarser as it goes. Resignation, not alarm.
+                ids[BIT_LOSE] = load(dir, "bitlose", buf(720) { t ->
+                    var v = 0f
+                    val notes = floatArrayOf(659f, 494f, 330f)
+                    for ((i, f) in notes.withIndex()) {
+                        val st = i * 0.15f
+                        if (t >= st) { val lt = t - st; v += (sq(f, lt) * 0.28f + saw(f * 1.01f, lt) * 0.26f) * exp(-lt * 5f) }
+                    }
+                    v *= 0.70f + 0.30f * sine(21f, t)
+                    val q = max(3f, 18f * exp(-t * 1.6f))
+                    v = (v * q).toInt() / q
+                    v * 0.6f
+                })
+                // ------------------------------------------------- the pool, and what it buys
+                // A PULL OF ENERGY. One short blip per 0.3 s of dwell, played at a pitch the caller
+                // raises with the draw — three of them, climbing, is the whole "it is working"
+                // signal, and it STOPS the instant you leave the pool. A single long clip started
+                // on entry would keep promising a draw you had already abandoned.
+                ids[POOL_SIP] = load(dir, "poolsip", buf(170) { t ->
+                    (sine(520f + 880f * t, t) * 0.50f + sine(1040f + 1760f * t, t) * 0.16f) * exp(-t * 22f)
+                })
+                // THE SHELL SEALS. Energy rushes in — a tone climbing out of nothing under a band of
+                // noise that swells and dies — and at 0.55 s a bright fifth-stacked chord lands on
+                // top of it: the dome closing. The 6 Hz shimmer on everything is what keeps it
+                // reading as light rather than as a machine starting up.
+                ids[SHIELD_UP] = load(dir, "shieldup", buf(950) { t ->
+                    val f = 180f + 900f * (1f - exp(-t * 3.2f))
+                    var v = sine(f, t) * 0.30f + sine(f * 1.5f, t) * 0.17f + sine(f * 2f, t) * 0.11f
+                    v += noise() * 0.20f * (1f - exp(-t * 5f)) * exp(-t * 2.4f)
+                    if (t > 0.55f) {
+                        val lt = t - 0.55f
+                        v += (sine(784f, lt) * 0.34f + sine(1176f, lt) * 0.21f + sine(1568f, lt) * 0.13f) * exp(-lt * 4.5f)
+                    }
+                    v *= 0.58f + 0.42f * sine(6f, t)
+                    // exp(-1.1t) is still at a third of full when a 950 ms clip runs out, and a
+                    // clip that stops rather than ends CLICKS. The last 150 ms is a ramp to zero.
+                    v * (1f - exp(-t * 14f)) * exp(-t * 1.1f) * (1f - ((t - 0.80f) / 0.15f).coerceIn(0f, 1f))
+                })
+                // THE SHELL EATS ONE. Glass, not meat: a high tone falling a little, ring-modulated
+                // at 150 Hz so it is glassy rather than tonal, with a hard strike transient on the
+                // front. Short — 300 ms — because it must land inside the bolt's own impact and get
+                // out of the way of whatever is still shooting at you.
+                ids[SHIELD_HIT] = load(dir, "shieldhit", buf(320) { t ->
+                    var v = sine(1760f - 520f * t, t) * 0.44f + sine(2640f, t) * 0.21f + sq(880f, t) * 0.11f
+                    v *= 0.66f + 0.34f * sine(150f, t)
+                    v += noise() * 0.30f * exp(-t * 42f)
+                    v * exp(-t * 13f)
+                })
+                // THE SHELL DEREZZES, and it is deliberately the SAME SOUND as a Recognizer coming
+                // apart, transposed: the tone falls, the grain gate slows continuous sound into
+                // discrete chunks, the crusher opens up, and it is cut to silence before the clip
+                // ends. Only the register and the pace differ — an octave up and less than half as
+                // long, because a shield is a smaller, thinner thing than a machine. The game says
+                // "derez" with one vocabulary; a novel noise here would have said this was a
+                // different kind of loss.
+                ids[SHIELD_DOWN] = load(dir, "shielddown", buf(560) { t ->
+                    if (t > 0.44f) 0f else {
+                        val f = 220f + 1320f * exp(-t * 6.4f)
+                        var v = saw(f, t) * 0.42f + sq(f * 0.5f, t) * 0.23f + sine(f * 2f, t) * 0.19f
+                        v += noise() * 0.48f * exp(-t * 30f)
+                        val gr = 10f + 150f * exp(-t * 4.2f)
+                        val gate = if ((t * gr).toInt() % 2 == 0) 1f else 0.14f
+                        val q = max(2f, 24f * exp(-t * 3.4f))
+                        v = (v * q).toInt() / q
+                        v * gate * exp(-t * 3.4f)
+                    }
+                })
+                ids[BIT] = load(dir, "bit", arpeggio(intArrayOf(880, 1174, 1568, 2093, 2637), 60, 0.75f))
+                ids[BUMP] = load(dir, "bump", buf(180) { t -> (sine(70f, t) * 0.8f + noise() * 0.2f * exp(-t * 60f)) * exp(-t * 16f) })
+                ids[TICK] = load(dir, "tick", buf(50) { t -> sq(1200f, t) * exp(-t * 60f) * 0.35f })
+                ids[SELECT] = load(dir, "select", arpeggio(intArrayOf(660, 990), 50, 0.6f))
+                ids[WAVE] = load(dir, "wave", arpeggio(intArrayOf(330, 440, 554, 659), 90, 0.7f))
+                ids[CLEAR] = load(dir, "clear", arpeggio(intArrayOf(523, 659, 784, 1046, 1318), 80, 0.7f))
+                ids[GAMEOVER] = load(dir, "over", buf(1200) { t ->
+                    val f = if (t < 0.5f) 300f - t * 160f else 220f - (t - 0.5f) * 120f
+                    (saw(f, t) * 0.4f + sine(f * 0.5f, t) * 0.4f) * exp(-t * 1.8f)
+                })
+                ids[HISCORE] = load(dir, "hi", arpeggio(intArrayOf(523, 659, 784, 1046, 1318, 1568, 2093), 80, 0.7f))
+                ids[START] = load(dir, "start", arpeggio(intArrayOf(262, 330, 392, 523, 659, 784), 70, 0.7f))
+                ids[LOCK] = load(dir, "lock", buf(240) { t -> sq(if ((t * 12f).toInt() % 2 == 0) 1400f else 1000f, t) * exp(-t * 9f) * 0.35f })
+                ids[SPAWN] = load(dir, "spawn", buf(500) { t -> (sine(180f + 1400f * t, t) * 0.4f + saw(90f + 300f * t, t) * 0.2f) * exp(-t * 5f) })
+                ids[THRUST] = load(dir, "thrust", buf(260) { t -> (noise() * 0.35f + saw(70f + 90f * t, t) * 0.45f) * exp(-t * 9f) })
+                ids[RICOCHET] = load(dir, "rico", buf(160) { t -> (sine(2200f - 1600f * t, t) * 0.4f + noise() * 0.3f) * exp(-t * 22f) })
+                // a servo whirr that rises then settles, the length of one quarter turn
+                ids[TURN] = load(dir, "turn", buf(300) { t ->
+                    val env = sin(3.1416f * (t / 0.3f).coerceIn(0f, 1f))
+                    (saw(180f + 260f * sin(3.1416f * t / 0.3f), t) * 0.35f + noise() * 0.12f) * env
+                })
+                ids[HUM] = load(dir, "hum", buf(1000) { t -> sine(58f, t) * 0.35f + sine(116f, t) * 0.15f + saw(29f, t) * 0.12f })
+                loaded = true
+            }
+        }
+    }
+
+    fun play(id: Int, pitch: Float = 1f, vol: Float = 1f) {
+        if (!loaded || id < 0 || id >= COUNT) return
+        handler?.post {
+            val s = ids[id]; if (s == 0) return@post
+            val duck = if (duckProvider?.invoke() == true) 0.45f else 1f
+            val v = (volume * vol * duck).coerceIn(0f, 1f); if (v <= 0f) return@post
+            pool.play(s, v, v, 1, 0, pitch.coerceIn(0.5f, 2f))
+        }
+    }
+
+    /** Looping hover hum whose volume follows the nearest Recognizer (0 = stop). */
+    fun hum(level: Float, rate: Float = 1f) {
+        handler?.post {
+            if (!loaded) return@post
+            val v = (volume * 0.5f * level.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+            if (v <= 0.01f) { if (humStream != 0) { pool.stop(humStream); humStream = 0 }; return@post }
+            if (humStream == 0) humStream = pool.play(ids[HUM], v, v, 0, -1, rate.coerceIn(0.5f, 2f))
+            else { pool.setVolume(humStream, v, v); pool.setRate(humStream, rate.coerceIn(0.5f, 2f)) }
+        }
+    }
+
+    fun stopHum() { handler?.post { if (humStream != 0) { pool.stop(humStream); humStream = 0 } } }
+
+    fun release() {
+        handler?.post { runCatching { pool.release() } }
+        thread?.quitSafely(); thread = null; handler = null
+    }
+
+    private fun buf(ms: Int, gen: (Float) -> Float): ShortArray {
+        val n = RATE * ms / 1000
+        return ShortArray(n) { i -> (gen(i.toFloat() / RATE).coerceIn(-1f, 1f) * 30000f).toInt().toShort() }
+    }
+    private fun sine(f: Float, t: Float) = sin(2.0 * PI * f * t).toFloat()
+    private fun saw(f: Float, t: Float): Float { val p = (f * t) % 1f; return 2f * p - 1f }
+    private fun sq(f: Float, t: Float) = if ((f * t) % 1f < 0.5f) 1f else -1f
+    private fun noise() = rng.nextFloat() * 2f - 1f
+    private fun arpeggio(freqs: IntArray, noteMs: Int, amp: Float): ShortArray {
+        val total = noteMs * freqs.size + 220
+        return buf(total) { t ->
+            var v = 0f
+            for ((i, f) in freqs.withIndex()) {
+                val start = i * noteMs / 1000f
+                if (t >= start) { val lt = t - start; v += (sine(f.toFloat(), lt) + 0.3f * sine(f * 2f, lt)) * exp(-lt * 5.5f) * amp * 0.4f }
+            }
+            v
+        }
+    }
+
+    private fun DataOutputStream.wInt(v: Int) { write(v and 0xFF); write((v shr 8) and 0xFF); write((v shr 16) and 0xFF); write((v shr 24) and 0xFF) }
+    private fun DataOutputStream.wShort(v: Int) { write(v and 0xFF); write((v shr 8) and 0xFF) }
+    private fun load(dir: File, name: String, pcm: ShortArray): Int {
+        val f = File(dir, "$name.wav")
+        val dataLen = pcm.size * 2
+        DataOutputStream(BufferedOutputStream(FileOutputStream(f))).use { o ->
+            o.writeBytes("RIFF"); o.wInt(36 + dataLen); o.writeBytes("WAVE")
+            o.writeBytes("fmt "); o.wInt(16); o.wShort(1); o.wShort(1)
+            o.wInt(RATE); o.wInt(RATE * 2); o.wShort(2); o.wShort(16)
+            o.writeBytes("data"); o.wInt(dataLen)
+            for (s in pcm) o.wShort(s.toInt())
+        }
+        return pool.load(f.absolutePath, 1)
+    }
+}

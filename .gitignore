@@ -1,0 +1,15 @@
+.gradle/
+build/
+app/build/
+local.properties
+.DS_Store
+*.apk.idsig
+.idea/
+*.iml
+.kotlin/
+tools/.venv/
+__pycache__/
+tools/fish.config
+*.key
+fish_key.txt
+music_staging/
