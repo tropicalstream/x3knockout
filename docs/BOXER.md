@@ -106,6 +106,20 @@ DODGE SENSE MEDIUM.
 
 ## 3. THE MOVESET — five attacks, five telegraphs, five answers
 
+> **AMENDED 2026-09-10 — EVERY TELL IN THIS SECTION IS 0.25 s LONGER THAN THE NUMBER PRINTED.**
+> The owner: *"give .25 more seconds for player to dodge after opponent glove lights up."* The
+> glove lights on the tell's first frame, so the printed numbers ARE the dodge window, and
+> `Boxer.TELL_GRACE` is added to every one of them AFTER the round, difficulty and fighter
+> multipliers — a quarter second for everybody, not a quarter second scaled down to 0.16 s on
+> HARD in round three. The authored numbers below are left as authored, because they are what the
+> STRIP plays and what the multipliers act on; add 0.25 to any of them to get what the player
+> actually gets. It is a large change and it is meant to be: at NORMAL it is +52 % to +75 % on a
+> round-one jab, and the Sardine's round-three jab goes from 0.19 s to 0.44 s.
+>
+> A FEINT gets nothing (it runs on `feintDur`, and a feint cannot hurt anybody). The Anvil's
+> COUNTER does get it, which nearly doubles the shortest tell in the game — the one place this
+> number changes a man's signature rather than his margin.
+
 Times are ROUND 1 at rate 1.0 (a moving player); a still player's own stillness stretches them
 without limit (LAW.md §3); §6 shortens them by round. The STRIKE is world time like everything
 else. Damage is on an open target; GUARD and GLANCE rules are DESIGN.md §4.1.

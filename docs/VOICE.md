@@ -54,7 +54,7 @@ So the owner picked seven models by URL, and they are the cast:
 | Role | fish.audio reference id | Chain | Why this position needs a person |
 |---|---|---|---|
 | ANNOUNCER | `ac192aa6102d4d669e1af4e4351cf89d` | long double echo + gentle compression | the house PA: the institution, the city, the number, the title |
-| REFEREE | `1443bdae8a9546d6bb451cc4816cfdfd` | one 38 ms slap + firmer compression | in the ring with you, no microphone |
+| REFEREE | `370ed9bcfa1f4e219cb9d7eb4fbe40cc` (recast 2026-09-10) | one 38 ms slap + firmer compression | in the ring with you, no microphone |
 | CORNER | `f54c4c98cacc4c12ba3d897c5a866a4b` | compression only, NO room | the old trainer, 30 cm from your ear |
 | rooster | `1bf2dee1ca2848b5bc0580a4d9301341` | the shared BOXER slap | 120 lb of showboat, too pleased with himself |
 | sardine | `97050f3ee6dd49f8b2b58de51ed21269` | " | never says one thing either |

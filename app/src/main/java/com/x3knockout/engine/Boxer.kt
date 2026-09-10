@@ -177,6 +177,33 @@ class Boxer {
         val RECOVER_MUL = floatArrayOf(1f, 0.8f, 0.65f)
         /** Tell multiplier by difficulty (EASY / NORMAL / HARD). */
         val TELL_MUL_DIFF = floatArrayOf(1.2f, 1f, 0.8f)
+        /**
+         * A QUARTER SECOND MORE TO ANSWER, added to every real tell (the owner, 2026-09-10:
+         * *"give .25 more seconds for player to dodge after opponent glove lights up"*).
+         *
+         * The glove lights on the tell's FIRST FRAME (`enter(Phase.TELL)` sets [flashGlove]), so
+         * the window between the light and the strike IS [tellDur] — and this is added AFTER
+         * every multiplier, deliberately. Folded in before them it would be scaled by the round,
+         * the difficulty and the man, and a quarter second asked for would be 0.16 s on HARD in
+         * round three against the Sardine. Added last it is a quarter second for everybody,
+         * everywhere, which is what was asked for.
+         *
+         * IT IS IN WORLD SECONDS, like every other window that can hurt you. At full speed — a
+         * player who is moving — that is exactly 0.25 more real seconds; standing still it is
+         * more, in the same proportion as everything else. Expressing it in real seconds would
+         * make it the one hostile timer outside the bubble, which is the defect LAW.md exists to
+         * prevent.
+         *
+         * IT ALSO REACHES THE ANVIL'S COUNTER, whose tell is deliberately the shortest thing in
+         * the game (`COUNTER_TELL` 0.30, "so the player still SEES it coming and can still, just
+         * about, answer it"). That nearly doubles it, and it is the one place this number changes
+         * a man's signature rather than his margin. Left in on purpose: the counter's glove
+         * lights up like any other and the ruling did not carve it out.
+         *
+         * A FEINT gets nothing. It runs on `feintDur` down its own path, and a feint cannot hurt
+         * anybody, so there is nothing there to dodge.
+         */
+        const val TELL_GRACE = 0.25f
         /** Damage on you by difficulty. */
         val DMG_MUL_DIFF = floatArrayOf(0.8f, 1f, 1.2f)
         /** The round feints begin, by difficulty: R3 only / R2 on / R1 on. */
@@ -1395,7 +1422,7 @@ class Boxer {
             // when the phrase ends. A four-shot R3 chain finishes in your face.
             creep = min(FLURRY_CREEP_MAX, creep + FLURRY_CREEP)
         }
-        tellDur = (base * fighter.tellMul * TELL_MUL_DIFF[d] * nextTellMul).coerceAtLeast(0.05f)
+        tellDur = (base * fighter.tellMul * TELL_MUL_DIFF[d] * nextTellMul).coerceAtLeast(0.05f) + TELL_GRACE
         nextTellMul = 1f
         strikeDur = ((atk.strikeT + STRIKE_DELTA[round - 1]) * fighter.strikeMul).coerceAtLeast(0.1f)
         recoverDur = atk.recoverT * RECOVER_MUL[round - 1] * fighter.recoverMul

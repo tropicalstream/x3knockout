@@ -316,6 +316,21 @@ class BoxerTest {
     }
 
     @Test
+    fun everyTellCarriesTheQuarterSecondGrace() {
+        // The owner's ruling: a quarter second more to answer, after the glove lights up — and it
+        // lights on the tell's FIRST frame. Added after every multiplier, so it is a quarter
+        // second for every man, every round and every difficulty rather than 0.16 s on HARD.
+        for (d in 0..2) {
+            val rec = Rec(); val b = boxer(rec, difficulty = d, drill = Boxer.Drill.PECK_L)
+            val body = standing()
+            until(b, body) { b.phase == Boxer.Phase.TELL }
+            val authored = Boxer.Attack.PECK_L.tellT * Boxer.TELL_MUL[0] * Fighter.ROOSTER.tellMul * Boxer.TELL_MUL_DIFF[d]
+            assertEquals("difficulty $d: the grace is on top of the authored tell",
+                authored + Boxer.TELL_GRACE, b.tellDur, 1e-4f)
+        }
+    }
+
+    @Test
     fun theTitleNeverThrowsAndTheDrillGoesQuietThere() {
         val rec = Rec(); val b = boxer(rec, drill = Boxer.Drill.ALL); val body = standing()
         b.idle()                                                        // the attract: not the rise, he is standing

@@ -60,7 +60,7 @@ CHAINS = {"ANNOUNCER": ANNOUNCER_CHAIN, "REFEREE": REFEREE_CHAIN, "CORNER": CORN
 # anything else falls through to macOS `say` with the voice named in VOICES.
 FISH_VOICE = {
     "ANNOUNCER": "ac192aa6102d4d669e1af4e4351cf89d",
-    "REFEREE": "1443bdae8a9546d6bb451cc4816cfdfd",
+    "REFEREE": "370ed9bcfa1f4e219cb9d7eb4fbe40cc",
     "CORNER": "f54c4c98cacc4c12ba3d897c5a866a4b",
 }
 # THE FIVE MEN, five models, in card order. The id suffix on a clip picks the man: `that_all_anvil`
