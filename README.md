@@ -8,6 +8,13 @@ telegraphs every punch with his eyes, his gloves, his crest and his feet; you sl
 step; and you hit him back by tapping the temples of the glasses, because both hands at the
 temples is a boxer's guard:
 
+## Screenshots
+
+<p>
+  <img src="images/title.png" width="45%" alt="X3 Knockout title screen with Kid Columbia">
+  <img src="images/gameplay.png" width="45%" alt="Fight intro card for The Rooster in the ring">
+</p>
+
 > **LEFT temple = LEFT glove. RIGHT temple = RIGHT glove. Both inside 120 ms = the big one.**
 
 All of it runs under the law this fork inherits from x3discs and keeps:
